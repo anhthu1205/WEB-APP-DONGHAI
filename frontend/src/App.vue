@@ -1,3 +1,8 @@
+<script setup>
+import ToastHost from './components/ToastHost.vue'
+</script>
+
 <template>
-  <main>Đông Hải</main>
+  <RouterView />
+  <ToastHost />
 </template>
