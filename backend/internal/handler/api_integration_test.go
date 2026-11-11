@@ -321,14 +321,21 @@ func TestAPI(t *testing.T) {
 	})
 
 	t.Run("T-I3..I8 khách & đơn", func(t *testing.T) {
+		// Khách 1 do seed tạo (ngoài phạm vi nhân viên): 409 nhưng không lộ tên/id.
 		r := e.do("POST", "/api/internal/customers", tUser, map[string]string{"full_name": "Ai Đó", "phone": "0912 345 678"})
 		e.expect(r, 409, "T-I3")
-		if !bytes.Contains(r.Body, []byte(`"existing_id":1`)) {
-			t.Errorf("T-I3 thiếu existing_id: %s", r.Body)
+		if bytes.Contains(r.Body, []byte(`existing_id`)) || bytes.Contains(r.Body, []byte("Nguyễn Văn An")) {
+			t.Errorf("T-I3 lộ khách ngoài phạm vi: %s", r.Body)
+		}
+		ra := e.do("POST", "/api/internal/customers", e.ta, map[string]string{"full_name": "Ai Đó", "phone": "0912 345 678"})
+		e.expect(ra, 409, "T-I3 admin")
+		if !bytes.Contains(ra.Body, []byte(`"existing_id":1`)) {
+			t.Errorf("T-I3 admin thiếu existing_id: %s", ra.Body)
 		}
 		nc := e.do("POST", "/api/internal/customers", tUser, map[string]string{"full_name": "Khách Mới", "phone": "0901000111", "address": "HP"})
 		e.expect(nc, 201, "T-A5 tạo khách")
-		bp := e.do("GET", "/api/internal/customers/by-phone?phone=%2B84987654321", tUser, nil)
+		e.expect(e.do("GET", "/api/internal/customers/by-phone?phone=%2B84987654321", tUser, nil), 404, "T-I4 ngoài phạm vi")
+		bp := e.do("GET", "/api/internal/customers/by-phone?phone=%2B84987654321", e.ta, nil)
 		e.expect(bp, 200, "T-I4")
 		if !bytes.Contains(bp.Body, []byte("Trần Thị Bình")) {
 			t.Error("T-I4 sai khách")
@@ -396,6 +403,105 @@ func TestAPI(t *testing.T) {
 		id := int(om["id"].(float64))
 		e.expect(e.do("GET", fmt.Sprintf("/api/internal/orders/%d", id), tUser, nil), 200, "order detail")
 		e.expect(e.do("GET", "/api/internal/customers/1", tUser, nil), 200, "customer detail")
+	})
+
+	t.Run("T-SC phạm vi dữ liệu theo người nhập", func(t *testing.T) {
+		u3 := e.createUser("nhanvien3")
+		c3 := e.do("POST", "/api/internal/customers", u3, map[string]string{"full_name": "Khách Của NV3", "phone": "0977000111"})
+		e.expect(c3, 201, "NV3 tạo khách")
+		cid := int(c3.Map(t)["id"].(float64))
+		o3 := e.do("POST", "/api/internal/orders", u3, map[string]any{"customer_id": cid, "purchase_date": "2026-11-05",
+			"items": []map[string]any{{"product_id": 1, "quantity": 2, "unit_price": 1000000}}})
+		e.expect(o3, 201, "NV3 tạo đơn")
+		oid := int(o3.Map(t)["id"].(float64))
+
+		// nhanvien1 không thấy gì của nhanvien3
+		if n := e.do("GET", "/api/internal/customers?q=0977000111", tUser, nil).Map(t)["total"].(float64); n != 0 {
+			t.Errorf("T-SC1 NV1 thấy khách của NV3 trong danh sách")
+		}
+		e.expect(e.do("GET", "/api/internal/customers/by-phone?phone=0977000111", tUser, nil), 404, "T-SC2 by-phone")
+		e.expect(e.do("GET", fmt.Sprintf("/api/internal/customers/%d", cid), tUser, nil), 404, "T-SC3 chi tiết khách")
+		e.expect(e.do("GET", fmt.Sprintf("/api/internal/orders/%d", oid), tUser, nil), 404, "T-SC4 chi tiết đơn")
+		if n := e.do("GET", "/api/internal/orders?q=0977000111", tUser, nil).Map(t)["total"].(float64); n != 0 {
+			t.Errorf("T-SC5 NV1 thấy đơn của NV3 trong danh sách")
+		}
+		e.expect(e.do("POST", "/api/internal/orders", tUser, map[string]any{"customer_id": cid, "purchase_date": "2026-11-06",
+			"items": []map[string]any{{"product_id": 1, "quantity": 1}}}), 400, "T-SC6 đặt đơn bằng customer_id ngoài phạm vi")
+		dup := e.do("POST", "/api/internal/customers", tUser, map[string]string{"full_name": "X", "phone": "0977000111"})
+		e.expect(dup, 409, "T-SC7 trùng SĐT")
+		if bytes.Contains(dup.Body, []byte("Khách Của NV3")) || bytes.Contains(dup.Body, []byte("existing_id")) {
+			t.Errorf("T-SC7 lộ khách của NV3: %s", dup.Body)
+		}
+
+		// Danh sách đơn của nhanvien1 chỉ gồm đơn do nhanvien1 nhập
+		var lst struct {
+			Total int `json:"total"`
+			Items []struct {
+				By string `json:"created_by_username"`
+			} `json:"items"`
+		}
+		e.do("GET", "/api/internal/orders?page_size=100", tUser, nil).JSON(t, &lst)
+		for _, it := range lst.Items {
+			if it.By != "nhanvien1" {
+				t.Errorf("T-SC8 NV1 thấy đơn của %q", it.By)
+			}
+		}
+		var d1 struct {
+			Scope       string `json:"scope"`
+			OrdersTotal int    `json:"orders_total"`
+			Staff       []any  `json:"staff_stats"`
+		}
+		e.do("GET", "/api/internal/dashboard", tUser, nil).JSON(t, &d1)
+		if d1.Scope != "own" || d1.OrdersTotal != lst.Total || d1.Staff != nil {
+			t.Errorf("T-SC9 dashboard NV1: %+v (đơn của NV1: %d)", d1, lst.Total)
+		}
+
+		// Admin thấy tất cả + bảng theo nhân viên
+		e.expect(e.do("GET", fmt.Sprintf("/api/internal/orders/%d", oid), e.ta, nil), 200, "T-SC10 admin xem đơn NV3")
+		var da struct {
+			Scope string `json:"scope"`
+			Staff []struct {
+				Username  string `json:"username"`
+				Customers int    `json:"customers_total"`
+				Orders    int    `json:"orders_total"`
+				Month     int    `json:"orders_this_month"`
+				Revenue   int64  `json:"revenue_this_month"`
+			} `json:"staff_stats"`
+		}
+		e.do("GET", "/api/internal/dashboard", e.ta, nil).JSON(t, &da)
+		found := false
+		for _, x := range da.Staff {
+			if x.Username == "nhanvien3" {
+				found = true
+				if x.Customers != 1 || x.Orders != 1 || x.Month != 1 || x.Revenue != 2000000 {
+					t.Errorf("T-SC11 số liệu NV3: %+v", x)
+				}
+			}
+		}
+		if da.Scope != "all" || !found {
+			t.Errorf("T-SC11 dashboard admin: %+v", da)
+		}
+
+		// NV1 bán cho khách đã có (của NV3) qua SĐT → dùng lại khách, NV1 chỉ thấy đơn của mình
+		re := e.do("POST", "/api/internal/orders", tUser, map[string]any{
+			"customer":      map[string]string{"full_name": "", "phone": "0977 000 111"},
+			"purchase_date": "2026-11-07", "items": []map[string]any{{"product_id": 2, "quantity": 1}},
+		})
+		e.expect(re, 201, "T-SC12 dùng lại khách qua SĐT")
+		var cd struct {
+			OrdersCount int `json:"orders_count"`
+			Orders      []struct {
+				By string `json:"created_by_username"`
+			} `json:"orders"`
+		}
+		e.do("GET", fmt.Sprintf("/api/internal/customers/%d", cid), tUser, nil).JSON(t, &cd)
+		if len(cd.Orders) != 1 || cd.Orders[0].By != "nhanvien1" || cd.OrdersCount != 1 {
+			t.Errorf("T-SC12 NV1 thấy đơn không phải của mình: %+v", cd)
+		}
+		e.do("GET", fmt.Sprintf("/api/internal/customers/%d", cid), e.ta, nil).JSON(t, &cd)
+		if len(cd.Orders) != 2 || cd.OrdersCount != 2 {
+			t.Errorf("T-SC13 admin phải thấy cả 2 đơn: %+v", cd)
+		}
 	})
 
 	t.Run("T-AD1..AD3 sản phẩm admin", func(t *testing.T) {

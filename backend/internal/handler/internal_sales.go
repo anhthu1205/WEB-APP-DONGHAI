@@ -15,7 +15,7 @@ type CustomerDetailDTO struct {
 }
 
 func (h *Handler) listCustomers(w http.ResponseWriter, r *http.Request) {
-	page, err := h.svc.ListCustomers(r.Context(), r.URL.Query().Get("q"), pageParams(r))
+	page, err := h.svc.ListCustomers(r.Context(), mw.UserFromContext(r.Context()), r.URL.Query().Get("q"), pageParams(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -24,7 +24,7 @@ func (h *Handler) listCustomers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) customerByPhone(w http.ResponseWriter, r *http.Request) {
-	c, err := h.svc.GetCustomerByPhone(r.Context(), r.URL.Query().Get("phone"))
+	c, err := h.svc.GetCustomerByPhone(r.Context(), mw.UserFromContext(r.Context()), r.URL.Query().Get("phone"))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -37,7 +37,7 @@ func (h *Handler) getCustomer(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	d, err := h.svc.GetCustomerDetail(r.Context(), id)
+	d, err := h.svc.GetCustomerDetail(r.Context(), mw.UserFromContext(r.Context()), id)
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -65,7 +65,7 @@ func (h *Handler) createCustomer(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) listOrders(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	page, err := h.svc.ListOrders(r.Context(), service.OrderFilterRequest{Q: q.Get("q"), From: q.Get("from"), To: q.Get("to")}, pageParams(r))
+	page, err := h.svc.ListOrders(r.Context(), mw.UserFromContext(r.Context()), service.OrderFilterRequest{Q: q.Get("q"), From: q.Get("from"), To: q.Get("to")}, pageParams(r))
 	if err != nil {
 		writeError(w, r, err)
 		return
@@ -79,7 +79,7 @@ func (h *Handler) getOrder(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	o, err := h.svc.GetOrder(r.Context(), id)
+	o, err := h.svc.GetOrderFor(r.Context(), mw.UserFromContext(r.Context()), id)
 	if err != nil {
 		writeError(w, r, err)
 		return

@@ -2,27 +2,50 @@ package handler
 
 import (
 	"net/http"
+
+	mw "donghai/internal/middleware"
 )
 
-// DashboardDTO là số liệu tổng quan.
+// StaffStatDTO là số liệu nhập liệu của 1 tài khoản (chỉ admin thấy).
+type StaffStatDTO struct {
+	UserID           int64  `json:"user_id"`
+	Username         string `json:"username"`
+	FullName         string `json:"full_name"`
+	Role             string `json:"role"`
+	IsActive         bool   `json:"is_active"`
+	CustomersTotal   int    `json:"customers_total"`
+	OrdersTotal      int    `json:"orders_total"`
+	OrdersThisMonth  int    `json:"orders_this_month"`
+	RevenueThisMonth int64  `json:"revenue_this_month"`
+}
+
+// DashboardDTO là số liệu tổng quan theo phạm vi người xem.
 type DashboardDTO struct {
-	CustomersTotal  int        `json:"customers_total"`
-	OrdersThisMonth int        `json:"orders_this_month"`
-	OrdersTotal     int        `json:"orders_total"`
-	RecentOrders    []OrderDTO `json:"recent_orders"`
+	Scope            string         `json:"scope"` // "all" | "own"
+	CustomersTotal   int            `json:"customers_total"`
+	OrdersThisMonth  int            `json:"orders_this_month"`
+	OrdersTotal      int            `json:"orders_total"`
+	RevenueThisMonth int64          `json:"revenue_this_month"`
+	RecentOrders     []OrderDTO     `json:"recent_orders"`
+	StaffStats       []StaffStatDTO `json:"staff_stats,omitempty"`
 }
 
 func (h *Handler) dashboard(w http.ResponseWriter, r *http.Request) {
-	d, err := h.svc.GetDashboard(r.Context())
+	d, err := h.svc.GetDashboard(r.Context(), mw.UserFromContext(r.Context()))
 	if err != nil {
 		writeError(w, r, err)
 		return
 	}
 	today := h.svc.Today()
-	out := DashboardDTO{CustomersTotal: d.CustomersTotal, OrdersThisMonth: d.OrdersThisMonth,
-		OrdersTotal: d.OrdersTotal, RecentOrders: []OrderDTO{}}
+	out := DashboardDTO{Scope: d.Scope, CustomersTotal: d.CustomersTotal, OrdersThisMonth: d.OrdersThisMonth,
+		OrdersTotal: d.OrdersTotal, RevenueThisMonth: d.RevenueThisMonth, RecentOrders: []OrderDTO{}}
 	for _, o := range d.RecentOrders {
 		out.RecentOrders = append(out.RecentOrders, toOrder(o, today, false))
+	}
+	for _, x := range d.StaffStats {
+		out.StaffStats = append(out.StaffStats, StaffStatDTO{UserID: x.UserID, Username: x.Username, FullName: x.FullName,
+			Role: x.Role, IsActive: x.Active, CustomersTotal: x.CustomersTotal, OrdersTotal: x.OrdersTotal,
+			OrdersThisMonth: x.OrdersInRange, RevenueThisMonth: x.RevenueInRange})
 	}
 	writeJSON(w, http.StatusOK, out)
 }

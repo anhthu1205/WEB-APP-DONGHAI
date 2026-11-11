@@ -6,6 +6,9 @@ import { prettyPhone } from '../../utils/phone'
 import AppIcon from '../../components/AppIcon.vue'
 import StateBlock from '../../components/StateBlock.vue'
 import PaginationBar from '../../components/PaginationBar.vue'
+import { useAuthStore } from '../../stores/auth'
+
+const auth = useAuthStore()
 
 const f = reactive({ q: '', from: '', to: '' })
 const page = ref(1)
@@ -43,7 +46,7 @@ function reset() { f.q = ''; f.from = ''; f.to = '' }
       <template v-else>
         <div class="table-wrap" :style="{ opacity: loading ? .6 : 1 }">
           <table class="table responsive">
-            <thead><tr><th>Mã đơn</th><th>Ngày mua</th><th>Khách hàng</th><th class="right">SL</th><th class="right">Tổng tiền</th><th>Bảo hành</th><th>Người nhập</th></tr></thead>
+            <thead><tr><th>Mã đơn</th><th>Ngày mua</th><th>Khách hàng</th><th class="right">SL</th><th class="right">Tổng tiền</th><th>Bảo hành</th><th v-if="auth.isAdmin">Người nhập</th></tr></thead>
             <tbody>
               <tr v-for="o in data.items" :key="o.id">
                 <td data-label="Mã đơn"><RouterLink :to="'/noi-bo/don-hang/' + o.id" class="row-link num">{{ o.order_code }}</RouterLink></td>
@@ -52,7 +55,7 @@ function reset() { f.q = ''; f.from = ''; f.to = '' }
                 <td data-label="Số lượng" class="right num">{{ o.items_count }}</td>
                 <td data-label="Tổng tiền" class="right num">{{ formatVND(o.total_amount) }}</td>
                 <td data-label="Bảo hành"><span class="badge" :class="o.status === 'active' ? 'badge-ok' : 'badge-muted'">{{ o.status === 'active' ? 'Đến ' + formatDate(o.warranty_end_date) : 'Hết hạn' }}</span></td>
-                <td data-label="Người nhập" class="muted">{{ o.created_by_username || '—' }}</td>
+                <td v-if="auth.isAdmin" data-label="Người nhập" class="muted">{{ o.created_by_username || '—' }}</td>
               </tr>
             </tbody>
           </table>

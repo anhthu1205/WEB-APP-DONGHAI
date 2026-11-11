@@ -48,28 +48,48 @@ func customerSearch(q string) repository.CustomerSearch {
 	return cs
 }
 
-// ListCustomers tìm khách.
-func (s *Service) ListCustomers(ctx context.Context, q string, pp domain.PageParams) (*domain.Page[*domain.Customer], error) {
-	return s.store.ListCustomers(ctx, customerSearch(q), pp)
+// DataScope trả phạm vi dữ liệu của người dùng: admin → nil (xem tất cả);
+// nhân viên → id của chính họ (chỉ dữ liệu do họ nhập).
+func DataScope(me *domain.User) *int64 {
+	if me.IsAdmin() {
+		return nil
+	}
+	id := me.ID
+	return &id
 }
 
-// GetCustomerByPhone tìm chính xác theo SĐT chuẩn hóa.
-func (s *Service) GetCustomerByPhone(ctx context.Context, raw string) (*domain.Customer, error) {
+// ListCustomers tìm khách trong phạm vi của me.
+func (s *Service) ListCustomers(ctx context.Context, me *domain.User, q string, pp domain.PageParams) (*domain.Page[*domain.Customer], error) {
+	return s.store.ListCustomers(ctx, customerSearch(q), DataScope(me), pp)
+}
+
+// GetCustomerByPhone tìm chính xác theo SĐT chuẩn hóa, trong phạm vi của me
+// (khách ngoài phạm vi trả 404 như không tồn tại, để không lộ tên khách của người khác).
+func (s *Service) GetCustomerByPhone(ctx context.Context, me *domain.User, raw string) (*domain.Customer, error) {
 	p, err := phone.Normalize(raw)
 	if err != nil {
 		return nil, &domain.ValidationError{Fields: map[string]string{"phone": "Số điện thoại không hợp lệ"}}
 	}
+	const msg = "Không tìm thấy khách hàng với số điện thoại này"
 	c, err := s.store.GetCustomerByPhone(ctx, p)
-	return c, notFound(err, "Không tìm thấy khách hàng với số điện thoại này")
+	if err != nil {
+		return nil, notFound(err, msg)
+	}
+	if scope := DataScope(me); scope != nil {
+		c, err = s.store.GetCustomerScoped(ctx, c.ID, scope)
+		return c, notFound(err, msg)
+	}
+	return c, nil
 }
 
-// GetCustomerDetail: khách + đơn hàng.
-func (s *Service) GetCustomerDetail(ctx context.Context, id int64) (*CustomerDetail, error) {
-	c, err := s.store.GetCustomer(ctx, id)
+// GetCustomerDetail: khách + đơn hàng trong phạm vi của me.
+func (s *Service) GetCustomerDetail(ctx context.Context, me *domain.User, id int64) (*CustomerDetail, error) {
+	scope := DataScope(me)
+	c, err := s.store.GetCustomerScoped(ctx, id, scope)
 	if err != nil {
 		return nil, notFound(err, "Không tìm thấy khách hàng")
 	}
-	orders, err := s.store.ListOrdersByCustomer(ctx, id)
+	orders, err := s.store.ListOrdersByCustomer(ctx, id, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +123,14 @@ func (s *Service) CreateCustomer(ctx context.Context, me *domain.User, in Custom
 		return nil, err
 	}
 	if ex, err := s.store.GetCustomerByPhone(ctx, c.Phone); err == nil {
+		visible, err := s.store.CustomerInScope(ctx, ex.ID, DataScope(me))
+		if err != nil {
+			return nil, err
+		}
+		if !visible {
+			// Khách của nhân viên khác: không lộ tên/id.
+			return nil, domain.Conflict("Số điện thoại này đã có trong hệ thống. Hãy vào Nhập đơn hàng và nhập số này để tạo đơn cho khách.")
+		}
 		return nil, phoneConflict(ex)
 	} else if !errors.Is(err, domain.ErrNotFound) {
 		return nil, err

@@ -37,7 +37,7 @@ func (s *Service) LookupWarranty(ctx context.Context, in WarrantyLookupRequest) 
 		return nil, err
 	}
 	res.CustomerNameMasked = phone.MaskName(c.FullName)
-	if res.Orders, err = s.store.ListOrdersByCustomer(ctx, c.ID); err != nil {
+	if res.Orders, err = s.store.ListOrdersByCustomer(ctx, c.ID, nil); err != nil {
 		return nil, err
 	}
 	return res, nil

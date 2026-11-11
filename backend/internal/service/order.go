@@ -59,19 +59,22 @@ type OrderFilterRequest struct {
 
 // Dashboard là số liệu tổng quan nội bộ.
 type Dashboard struct {
-	CustomersTotal  int
-	OrdersThisMonth int
-	OrdersTotal     int
-	RecentOrders    []*domain.Order
+	Scope            string // "all" (admin) hoặc "own" (nhân viên: chỉ dữ liệu do mình nhập)
+	CustomersTotal   int
+	OrdersThisMonth  int
+	OrdersTotal      int
+	RevenueThisMonth int64
+	RecentOrders     []*domain.Order
+	StaffStats       []repository.StaffStat // chỉ admin
 }
 
 // OrderCode = "DH" + id 6 chữ số.
 func OrderCode(id int64) string { return fmt.Sprintf("DH%06d", id) }
 
-// ListOrders tìm đơn.
-func (s *Service) ListOrders(ctx context.Context, f OrderFilterRequest, pp domain.PageParams) (*domain.Page[*domain.Order], error) {
+// ListOrders tìm đơn trong phạm vi của me.
+func (s *Service) ListOrders(ctx context.Context, me *domain.User, f OrderFilterRequest, pp domain.PageParams) (*domain.Page[*domain.Order], error) {
 	var v domain.Validator
-	of := repository.OrderFilter{Customer: customerSearch(f.Q)}
+	of := repository.OrderFilter{Customer: customerSearch(f.Q), Owner: DataScope(me)}
 	if strings.TrimSpace(f.From) != "" {
 		t := parseDate(&v, "from", f.From)
 		of.From = &t
@@ -86,27 +89,51 @@ func (s *Service) ListOrders(ctx context.Context, f OrderFilterRequest, pp domai
 	return s.store.ListOrders(ctx, of, pp)
 }
 
-// GetOrder chi tiết đơn.
+// GetOrder chi tiết đơn (không kiểm tra phạm vi; dùng nội bộ và cho admin).
 func (s *Service) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
 	o, err := s.store.GetOrder(ctx, id)
 	return o, notFound(err, "Không tìm thấy đơn hàng")
 }
 
-// GetDashboard số liệu tổng quan.
-func (s *Service) GetDashboard(ctx context.Context) (*Dashboard, error) {
+// GetOrderFor chi tiết đơn trong phạm vi của me: nhân viên chỉ xem được đơn do mình nhập
+// (đơn của người khác trả 404 như không tồn tại).
+func (s *Service) GetOrderFor(ctx context.Context, me *domain.User, id int64) (*domain.Order, error) {
+	o, err := s.GetOrder(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if scope := DataScope(me); scope != nil && (o.CreatedBy == nil || *o.CreatedBy != *scope) {
+		return nil, domain.NotFound("Không tìm thấy đơn hàng")
+	}
+	return o, nil
+}
+
+// GetDashboard số liệu tổng quan theo phạm vi của me; admin có thêm bảng theo nhân viên.
+func (s *Service) GetDashboard(ctx context.Context, me *domain.User) (*Dashboard, error) {
 	today := s.Today()
 	first := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
 	last := first.AddDate(0, 1, -1)
-	d := &Dashboard{}
+	scope := DataScope(me)
+	d := &Dashboard{Scope: "own"}
+	if scope == nil {
+		d.Scope = "all"
+	}
 	var err error
-	if d.CustomersTotal, err = s.store.CountCustomers(ctx); err != nil {
+	if d.CustomersTotal, err = s.store.CountCustomers(ctx, scope); err != nil {
 		return nil, err
 	}
-	if d.OrdersTotal, d.OrdersThisMonth, err = s.store.OrderStats(ctx, first, last); err != nil {
+	st, err := s.store.GetOrderStats(ctx, first, last, scope)
+	if err != nil {
 		return nil, err
 	}
-	if d.RecentOrders, err = s.store.RecentOrders(ctx, 5); err != nil {
+	d.OrdersTotal, d.OrdersThisMonth, d.RevenueThisMonth = st.Total, st.InRange, st.RevenueInRange
+	if d.RecentOrders, err = s.store.RecentOrders(ctx, 5, scope); err != nil {
 		return nil, err
+	}
+	if scope == nil {
+		if d.StaffStats, err = s.store.ListStaffStats(ctx, first, last); err != nil {
+			return nil, err
+		}
 	}
 	return d, nil
 }
@@ -214,7 +241,8 @@ func (s *Service) CreateOrder(ctx context.Context, me *domain.User, in CreateOrd
 	err := s.store.InTx(ctx, func(tx *serviceTx) error {
 		var customerID int64
 		if in.CustomerID != nil {
-			if _, err := tx.GetCustomer(ctx, *in.CustomerID); err != nil {
+			// Nhân viên chỉ chọn được khách trong phạm vi của mình.
+			if _, err := tx.GetCustomerScoped(ctx, *in.CustomerID, DataScope(me)); err != nil {
 				if errors.Is(err, domain.ErrNotFound) {
 					return &domain.ValidationError{Fields: map[string]string{"customer_id": "Khách hàng không tồn tại"}}
 				}

@@ -33,6 +33,7 @@ type OrderFilter struct {
 	Customer CustomerSearch
 	From     *time.Time
 	To       *time.Time
+	Owner    *int64 // nil = tất cả (admin); khác nil = chỉ đơn do người này nhập
 }
 
 const orderWhere = `WHERE (($1 = '' AND $2 = '' AND $3 = '')
@@ -40,18 +41,19 @@ const orderWhere = `WHERE (($1 = '' AND $2 = '' AND $3 = '')
 	OR ($2 <> '' AND c.phone LIKE $5)
 	OR ($3 <> '' AND c.phone = $3))
 	AND ($6::date IS NULL OR o.purchase_date >= $6::date)
-	AND ($7::date IS NULL OR o.purchase_date <= $7::date)`
+	AND ($7::date IS NULL OR o.purchase_date <= $7::date)
+	AND ($8::bigint IS NULL OR o.created_by = $8::bigint)`
 
 // ListOrders tìm đơn có phân trang (ngày mua mới nhất trước).
 func (s *Store) ListOrders(ctx context.Context, f OrderFilter, pp domain.PageParams) (*domain.Page[*domain.Order], error) {
 	cs := f.Customer
-	args := []any{cs.Name, cs.Digits, cs.Phone, likePattern(cs.Name), likePattern(cs.Digits), f.From, f.To}
+	args := []any{cs.Name, cs.Digits, cs.Phone, likePattern(cs.Name), likePattern(cs.Digits), f.From, f.To, f.Owner}
 	var total int
 	if err := s.q.QueryRow(ctx, `SELECT count(*)`+orderFrom+orderWhere, args...).Scan(&total); err != nil {
 		return nil, mapErr(err)
 	}
 	rows, err := s.q.Query(ctx, `SELECT `+orderCols+orderFrom+orderWhere+`
-		ORDER BY o.purchase_date DESC, o.id DESC LIMIT $8 OFFSET $9`, append(args, pp.PageSize, pp.Offset())...)
+		ORDER BY o.purchase_date DESC, o.id DESC LIMIT $9 OFFSET $10`, append(args, pp.PageSize, pp.Offset())...)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -62,9 +64,10 @@ func (s *Store) ListOrders(ctx context.Context, f OrderFilter, pp domain.PagePar
 	return &domain.Page[*domain.Order]{Items: items, Total: total, Page: pp.Page, PageSize: pp.PageSize}, nil
 }
 
-// RecentOrders lấy n đơn mới nhập gần đây.
-func (s *Store) RecentOrders(ctx context.Context, n int) ([]*domain.Order, error) {
-	rows, err := s.q.Query(ctx, `SELECT `+orderCols+orderFrom+` ORDER BY o.created_at DESC, o.id DESC LIMIT $1`, n)
+// RecentOrders lấy n đơn mới nhập gần đây trong phạm vi owner.
+func (s *Store) RecentOrders(ctx context.Context, n int, owner *int64) ([]*domain.Order, error) {
+	rows, err := s.q.Query(ctx, `SELECT `+orderCols+orderFrom+` WHERE ($2::bigint IS NULL OR o.created_by = $2::bigint)
+		ORDER BY o.created_at DESC, o.id DESC LIMIT $1`, n, owner)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -85,10 +88,11 @@ func (s *Store) GetOrder(ctx context.Context, id int64) (*domain.Order, error) {
 	return o, nil
 }
 
-// ListOrdersByCustomer lấy mọi đơn của khách (ngày mua giảm dần) kèm items.
-func (s *Store) ListOrdersByCustomer(ctx context.Context, customerID int64) ([]*domain.Order, error) {
+// ListOrdersByCustomer lấy đơn của khách trong phạm vi owner (ngày mua giảm dần) kèm items.
+func (s *Store) ListOrdersByCustomer(ctx context.Context, customerID int64, owner *int64) ([]*domain.Order, error) {
 	rows, err := s.q.Query(ctx, `SELECT `+orderCols+orderFrom+` WHERE o.customer_id = $1
-		ORDER BY o.purchase_date DESC, o.id DESC`, customerID)
+		AND ($2::bigint IS NULL OR o.created_by = $2::bigint)
+		ORDER BY o.purchase_date DESC, o.id DESC`, customerID, owner)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -182,9 +186,53 @@ func (s *Store) DeleteOrder(ctx context.Context, id int64) error {
 	return nil
 }
 
-// OrderStats trả tổng số đơn và số đơn có ngày mua trong [from, to].
-func (s *Store) OrderStats(ctx context.Context, from, to time.Time) (total, inRange int, err error) {
-	err = s.q.QueryRow(ctx, `SELECT count(*), count(*) FILTER (WHERE purchase_date BETWEEN $1::date AND $2::date) FROM orders`,
-		from, to).Scan(&total, &inRange)
-	return total, inRange, mapErr(err)
+// OrderStats là số liệu đơn trong phạm vi owner.
+type OrderStats struct {
+	Total          int   // tổng số đơn
+	InRange        int   // số đơn có ngày mua trong [from, to]
+	RevenueInRange int64 // doanh số (VND) các đơn có ngày mua trong [from, to]
+}
+
+// GetOrderStats trả số liệu đơn trong phạm vi owner.
+func (s *Store) GetOrderStats(ctx context.Context, from, to time.Time, owner *int64) (OrderStats, error) {
+	var st OrderStats
+	err := s.q.QueryRow(ctx, `SELECT count(*),
+		count(*) FILTER (WHERE o.purchase_date BETWEEN $1::date AND $2::date),
+		COALESCE(sum((SELECT sum(oi.quantity::bigint * oi.unit_price) FROM order_items oi WHERE oi.order_id = o.id))
+			FILTER (WHERE o.purchase_date BETWEEN $1::date AND $2::date), 0)::bigint
+		FROM orders o WHERE ($3::bigint IS NULL OR o.created_by = $3::bigint)`,
+		from, to, owner).Scan(&st.Total, &st.InRange, &st.RevenueInRange)
+	return st, mapErr(err)
+}
+
+// StaffStat là số liệu của 1 tài khoản (cho admin).
+type StaffStat struct {
+	UserID         int64
+	Username       string
+	FullName       string
+	Role           string
+	Active         bool
+	CustomersTotal int
+	OrdersTotal    int
+	OrdersInRange  int
+	RevenueInRange int64
+}
+
+// ListStaffStats trả số liệu nhập liệu của từng tài khoản (đơn có ngày mua trong [from, to]).
+func (s *Store) ListStaffStats(ctx context.Context, from, to time.Time) ([]StaffStat, error) {
+	rows, err := s.q.Query(ctx, `SELECT u.id, u.username, u.full_name, u.role, u.is_active,
+		(SELECT count(*) FROM customers c WHERE c.created_by = u.id)::int,
+		(SELECT count(*) FROM orders o WHERE o.created_by = u.id)::int,
+		(SELECT count(*) FROM orders o WHERE o.created_by = u.id AND o.purchase_date BETWEEN $1::date AND $2::date)::int,
+		COALESCE((SELECT sum(oi.quantity::bigint * oi.unit_price) FROM orders o JOIN order_items oi ON oi.order_id = o.id
+			WHERE o.created_by = u.id AND o.purchase_date BETWEEN $1::date AND $2::date), 0)::bigint
+		FROM users u ORDER BY u.role, u.username`, from, to)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	return collect(rows, func(r pgx.Rows) (StaffStat, error) {
+		var x StaffStat
+		err := r.Scan(&x.UserID, &x.Username, &x.FullName, &x.Role, &x.Active, &x.CustomersTotal, &x.OrdersTotal, &x.OrdersInRange, &x.RevenueInRange)
+		return x, err
+	})
 }
