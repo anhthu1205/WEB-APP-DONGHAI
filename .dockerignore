@@ -1,0 +1,9 @@
+**/node_modules
+frontend/dist
+.git
+docs
+*.env
+.env
+.env.*
+backend/bin
+**/*.test
