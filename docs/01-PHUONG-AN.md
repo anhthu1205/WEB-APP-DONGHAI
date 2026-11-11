@@ -56,10 +56,12 @@ Trình duyệt ──HTTPS──► Render Web Service (1 container Docker, gói
 - Production: cùng origin → **không cần CORS**. Dev: Vite (`:5173`) proxy `/api` → Go (`:8080`); CORS chỉ bật khi đặt `ALLOWED_ORIGINS`.
 - Không dùng Supabase Auth/Storage/PostgREST; Supabase chỉ là Postgres. Mọi truy cập dữ liệu qua backend Go.
 
-### 2.1 Thư viện Go (go 1.24)
+### 2.1 Thư viện Go (go 1.24) — **phiên bản chốt** (Agent 2 đã kiểm chứng `go build`/`go vet` với Go 1.24.7, `GOTOOLCHAIN=local`)
+> Bản mới nhất của pgx (≥ v5.9), x/crypto (≥ v0.49), x/time (≥ v0.15) yêu cầu Go ≥ 1.25 → **KHÔNG** `go get ...@latest`. Dùng đúng: `github.com/go-chi/chi/v5 v5.5.0`, `github.com/jackc/pgx/v5 v5.8.0`, `github.com/golang-jwt/jwt/v5 v5.3.1`, `golang.org/x/crypto v0.48.0`, `golang.org/x/time v0.14.0`. `go.mod`: `go 1.24.0`. Luôn chạy lệnh go với `GOTOOLCHAIN=local` để không tự tải toolchain khác (Dockerfile dùng `golang:1.24-alpine`).
+
 | Mục đích | Thư viện | Lý do |
 |---|---|---|
-| Router | `github.com/go-chi/chi/v5` + `chi/v5/middleware` (RequestID, RealIP, Recoverer, Timeout) | Nhẹ, tương thích `net/http`, group route theo quyền gọn |
+| Router | `github.com/go-chi/chi/v5` + `chi/v5/middleware` (RequestID, Recoverer, Timeout — **không dùng `RealIP`**, xem mục 6) | Nhẹ, tương thích `net/http`, group route theo quyền gọn |
 | DB | `github.com/jackc/pgx/v5` (`pgxpool`) | Driver Postgres nhanh nhất, hỗ trợ `bytea`, `jsonb`, `date`, transaction |
 | JWT | `github.com/golang-jwt/jwt/v5` | Chuẩn, hỗ trợ validate `exp`, ép thuật toán |
 | Mật khẩu | `golang.org/x/crypto/bcrypt` (cost 12) | Chuẩn công nghiệp |
@@ -71,7 +73,7 @@ Trình duyệt ──HTTPS──► Render Web Service (1 container Docker, gói
 Không dùng ORM (SQL viết tay trong repository, tham số hóa `$1..$n`).
 
 ### 2.2 Frontend
-Vue 3 (Composition API, `<script setup>`), Vite 5/6, Vue Router 4, Pinia 2. **Không dùng UI framework** — CSS thuần với biến CSS (`src/assets/main.css`) để bundle nhỏ. HTTP: wrapper `fetch` tự viết (không cần axios). Các view nội bộ **lazy-load** (`() => import(...)`) để bundle công khai không chứa code nội bộ.
+Vue 3 (Composition API, `<script setup>`), **chốt**: `vue@^3.5`, `vite@^6.4`, `@vitejs/plugin-vue@^5.2`, `vue-router@^4.6`, `pinia@^2.3` (đã kiểm tương thích Node 22); commit `package-lock.json`. **Không dùng UI framework** — CSS thuần với biến CSS (`src/assets/main.css`) để bundle nhỏ. HTTP: wrapper `fetch` tự viết (không cần axios). Các view nội bộ **lazy-load** (`() => import(...)`) để bundle công khai không chứa code nội bộ.
 
 ### 2.3 Triển khai
 - `Dockerfile` multi-stage ở gốc repo:
@@ -321,12 +323,14 @@ INSERT INTO schema_migrations (version) VALUES ('0002_rls') ON CONFLICT DO NOTHI
 `phone.Mask("0912345678")` → `"091****678"` (giữ 3 đầu + 3 cuối). `MaskName("Nguyễn Văn An")` → `"N*** V*** An"` (giữ tên cuối, các từ khác chỉ giữ ký tự đầu; xử lý theo rune UTF-8).
 
 **Bảo hành** — `warranty.EndDate(purchase time.Time) time.Time`: `purchase.AddDate(2,0,0)`; nếu ngày mua là 29/02 và năm đích không nhuận → **28/02** (không để Go tự trôi sang 01/03). `Status(end, today)`: `active` nếu `today <= end` (bảo hành hết ngày end), ngược lại `expired`; `days_left = max(0, end - today)` theo ngày. `today` lấy theo `Asia/Ho_Chi_Minh`. Hằng số `WarrantyYears = 2` trong package. Không lưu ngày hết hạn trong DB (tính ở backend).
+**Chốt (Agent 2)**: (a) Ngày là *ngày dân sự*: cột `date` scan về `time.Time` 00:00 UTC; `today` = ngày hiện tại theo `Asia/Ho_Chi_Minh` rồi dựng lại thành `time.Date(y,m,d,0,0,0,0,time.UTC)` trước khi so sánh/trừ — không bao giờ so `time.Time` khác múi giờ. (b) `Status(end, today time.Time) (status string, daysLeft int)` là hàm thuần nhận `today` làm tham số; service tra bảo hành nhận `now func() time.Time` (inject được trong test). (c) Ngày cuối (`today == end`) → `active`, `days_left = 0`; UI hiển thị "Còn bảo hành (hết hạn hôm nay)". Ví dụ: mua 2024-11-11, hôm nay 2026-11-11 → active/0; mua 2024-11-10 → hết hạn 2026-11-10 → expired.
 
 **Khác**: `purchase_date` không được ở tương lai (> hôm nay VN) và không trước 2000-01-01. Đơn phải có ≥ 1 dòng, ≤ 50 dòng. `product_name`/`unit_price` mặc định lấy từ SP (unit_price mặc định = `price_public`, cho phép sửa). Slug tự sinh từ tên (bỏ dấu tiếng Việt, `đ`→`d`) nếu không gửi; trùng → thêm `-2`, `-3`. Ảnh chính: khi upload ảnh đầu tiên của SP → tự `is_main=true`; khi xóa ảnh chính → ảnh có `sort_order` nhỏ nhất thành chính (trong 1 transaction).
 
 ### 4.4 Migration runner
 - Bảng `schema_migrations(version)`; runner đọc file embed theo thứ tự tên, bỏ qua version đã có, chạy mỗi file trong 1 transaction. Các file viết **idempotent** (`IF NOT EXISTS`, `ON CONFLICT`) và tự `INSERT` version ở cuối ⇒ Agent 4 có thể apply nội dung y nguyên bằng `mcp__Supabase__apply_migration`, sau đó backend khởi động sẽ không chạy lại.
-- Dùng `pg_advisory_lock(727001)` quanh quá trình migrate để tránh chạy song song.
+- Dùng `pg_advisory_lock(727001)` quanh quá trình migrate để tránh chạy song song — **PHẢI** trên 1 kết nối riêng (`pool.Acquire`) và unlock trên chính kết nối đó.
+- **Chốt (Agent 2)**: trước khi đọc danh sách version, runner tự chạy `CREATE TABLE IF NOT EXISTS schema_migrations (...)` (giống định nghĩa trong 0001) vì lần chạy đầu bảng chưa tồn tại. Sau khi chạy file, runner `INSERT ... ON CONFLICT DO NOTHING` version (trùng với INSERT cuối file — vô hại). Version = tên file bỏ `.sql` (vd `0001_init`). Đã kiểm chứng: 0001 + 0002 chạy 2 lần liên tiếp trên PostgreSQL 16 local không lỗi.
 
 ---
 
@@ -361,7 +365,7 @@ INSERT INTO schema_migrations (version) VALUES ('0002_rls') ON CONFLICT DO NOTHI
 | GET | `/api/public/company` | Thông tin công ty |
 | GET | `/api/public/products` | SP `is_visible=true`, sắp theo `sort_order, id`; hỗ trợ `?q=` |
 | GET | `/api/public/products/{slug}` | Chi tiết SP hiển thị; SP ẩn → 404 |
-| GET | `/api/images/{uuid}` | Trả bytes ảnh, `Content-Type` theo mime, `Cache-Control: public, max-age=31536000, immutable`, `ETag` = uuid |
+| GET | `/api/images/{uuid}` | Trả bytes ảnh, `Content-Type` theo mime, `Cache-Control: public, max-age=31536000, immutable`, `ETag: "<uuid>"` (có `If-None-Match` khớp → 304). `{uuid}` sai định dạng → **404** (validate trước khi query, không để lỗi 22P02 thành 500) |
 | POST | `/api/public/warranty/lookup` | Tra bảo hành theo SĐT (rate limit) |
 
 ```jsonc
@@ -386,7 +390,7 @@ INSERT INTO schema_migrations (version) VALUES ('0002_rls') ON CONFLICT DO NOTHI
 // 200 (luôn 200 khi SĐT hợp lệ, kể cả không có đơn → orders: [])
 {"phone_masked":"091****678","customer_name_masked":"N*** V*** An","warranty_years":2,"today":"2026-11-11",
  "orders":[{"order_code":"DH000012","purchase_date":"2025-03-10","warranty_end_date":"2027-03-10",
-   "status":"active","days_left":484,
+   "status":"active","days_left":119,
    "items":[{"product_name":"Máy lọc nước RO DH-9","quantity":1,"serial_number":"DH9-2503-0012"}]}]}
 // 400 VALIDATION_ERROR nếu SĐT sai định dạng; 429 nếu vượt rate limit
 ```
@@ -437,7 +441,7 @@ Tạo đơn + (nếu cần) khách trong **1 transaction**. `created_by` = user 
 | PATCH | `/products/{id}/visibility` | `{"is_visible":false}` |
 | DELETE | `/products/{id}` | 204; có `order_items` tham chiếu → 409 "Sản phẩm đã có đơn hàng, chỉ có thể ẩn" |
 | POST | `/products/{id}/images` | `multipart/form-data`, field `file` (1 ảnh/lần) → 201 `{"id","url","is_main","sort_order"}` |
-| PATCH | `/images/{uuid}` | `{"is_main":true}` và/hoặc `{"sort_order":2}` |
+| PATCH | `/images/{uuid}` | `{"is_main":true}` (đặt làm ảnh chính, bỏ chính ảnh cũ trong 1 transaction). **Chốt: không làm API sắp xếp ảnh** — `sort_order` tự gán = max+1 khi upload; ảnh trả về theo `is_main DESC, sort_order, created_at` |
 | DELETE | `/images/{uuid}` | 204 |
 | PUT | `/company` | Cập nhật toàn bộ thông tin công ty (URL MXH phải `https://` hoặc rỗng) |
 | GET | `/promotions` | Tất cả KM (phân trang, `?status=active|upcoming|ended`) |
@@ -450,7 +454,7 @@ Tạo đơn + (nếu cần) khách trong **1 transaction**. `created_by` = user 
 | DELETE | `/orders/{id}` | 204 |
 | GET | `/users` | Danh sách `{"id","username","full_name","role","is_active","last_login_at","created_at"}` |
 | POST | `/users` | `{"username","full_name","password"}` → tạo **role `user`** → 201; trùng → 409 |
-| PATCH | `/users/{id}` | `{"full_name"?, "is_active"?}`; khóa → tăng `token_version`. Không cho tự khóa mình / khóa admin → 400 |
+| PATCH | `/users/{id}` | `{"full_name"?, "is_active"?}`; khóa → tăng `token_version`. Không cho tự khóa mình / khóa admin → 400. Không có trường `role` (không thể nâng quyền qua API) |
 | POST | `/users/{id}/reset-password` | `{"new_password"}` → 204; tăng `token_version` |
 
 Admin cũng gọi được toàn bộ `/api/internal/*`.
@@ -465,10 +469,10 @@ Admin cũng gọi được toàn bộ `/api/internal/*`.
 | Middleware RequireAuth | Validate JWT → load user theo `sub` (1 query PK) → từ chối nếu `!is_active` hoặc `tv != token_version` ⇒ khóa/đổi mật khẩu có hiệu lực ngay. Role lấy **từ DB**, không tin claim |
 | Lưu token phía client | `localStorage` (key `dh_token`) + Bearer header ⇒ miễn nhiễm CSRF. Giảm rủi ro XSS: Vue tự escape, **cấm `v-html`** với dữ liệu người dùng (mô tả SP hiển thị dạng text với `white-space: pre-line`), CSP header |
 | Admin ban đầu | Lúc khởi động: nếu `SELECT count(*) FROM users WHERE role='admin'` = 0 → bắt buộc có `ADMIN_USERNAME`/`ADMIN_PASSWORD` (thiếu → log lỗi và thoát), tạo admin. Đã có admin → bỏ qua (không ghi đè mật khẩu) |
-| Rate limit (theo IP, `X-Forwarded-For` đầu tiên do Render đặt — dùng chi `RealIP`) | `/api/public/warranty/lookup`: 5 req/phút, burst 5; `/api/auth/login`: 10 req/phút, burst 5; toàn bộ `/api/*`: 120 req/phút. Ngoài ra lookup có thêm giới hạn toàn cục 300 req/giờ để chống dò phân tán |
+| Rate limit (theo IP client) | **Chốt (Agent 2)**: không dùng `chi middleware.RealIP` (nó tin `True-Client-IP`/`X-Forwarded-For` đầu tiên → client giả header để né limit). Viết `clientIP(r)`: ưu tiên `CF-Connecting-IP` (Render đứng sau Cloudflare, header này bị ghi đè nên không giả được) → nếu không có thì phần tử **cuối** của `X-Forwarded-For` → cuối cùng `RemoteAddr`. Ghi IP vào log request để Agent 4 xác nhận trên Render. Giới hạn: `/api/public/warranty/lookup`: 5 req/phút, burst 5; `/api/auth/login`: 10 req/phút, burst 5; toàn bộ `/api/*` **trừ `/api/images/*`**: 120 req/phút. Ngoài ra lookup có thêm giới hạn toàn cục 300 req/giờ để chống dò phân tán |
 | Chống dò SĐT | Rate limit + che tên/SĐT + không trả địa chỉ + POST body (SĐT không nằm trong URL/log) + phản hồi đồng nhất khi không có đơn |
-| Upload ảnh | `http.MaxBytesReader` 2 MB + 64 KB overhead; xác định loại bằng `http.DetectContentType` trên bytes thực (không tin header/đuôi file); chỉ `image/jpeg|png|webp`; tối đa 8 ảnh/SP (đếm trước khi insert); đọc kích thước bằng `image.DecodeConfig` (jpeg/png; webp qua `golang.org/x/image/webp` — NÊN) — decode lỗi → 415. Frontend NÊN resize về cạnh dài ≤ 1600px (canvas → webp/jpeg 0.85) trước khi upload |
-| Body JSON | Giới hạn 1 MB; `DisallowUnknownFields`; trim chuỗi; validate độ dài theo ràng buộc DB |
+| Upload ảnh | `http.MaxBytesReader` 2 MB + 64 KB overhead; xác định loại bằng `http.DetectContentType` trên bytes thực (không tin header/đuôi file); chỉ `image/jpeg|png|webp`; tối đa 8 ảnh/SP (đếm trước khi insert); đọc kích thước bằng `image.DecodeConfig` cho jpeg/png (decode lỗi → 415); **webp: chốt không thêm thư viện** `x/image`, chấp nhận theo `DetectContentType` (Go 1.24 nhận diện `image/webp`), `width/height = NULL`. Lỗi `*http.MaxBytesError` → 413. Frontend NÊN resize về cạnh dài ≤ 1600px (canvas → webp/jpeg 0.85) trước khi upload |
+| Body JSON | Giới hạn 1 MB; `DisallowUnknownFields`; trim chuỗi; validate độ dài theo ràng buộc DB. ⇒ Frontend **PHẢI** gửi đúng tập trường của request (không gửi lại nguyên object nhận từ GET có `id`, `created_at`...) |
 | CORS | Chỉ bật khi có `ALLOWED_ORIGINS` (dev); production cùng origin |
 | Header bảo mật | `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, `Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'` |
 | Lỗi nội bộ | Map lỗi domain → HTTP; lỗi lạ → 500 message chung + log `slog` có `request_id`. Lỗi pgx unique violation (23505) → 409, FK violation (23503) → 409 |
@@ -504,7 +508,7 @@ Guard `beforeEach`: `meta.requiresAuth` và chưa có token → `/dang-nhap?redi
 - **Header** (sticky): logo chữ "Đông Hải", menu: Sản phẩm (cuộn tới lưới) · Bảo hành · Liên hệ (cuộn tới footer); nút gọi điện `tel:`. Mobile: menu hamburger.
 - **Hero**: nền gradient màu thương hiệu (xanh biển `#0B5ED7` → `#0A3D91`, nhấn cam `#F59E0B`), tên công ty, slogan, 2 CTA: "Xem sản phẩm", "Tra cứu bảo hành".
 - **Lưới sản phẩm**: ô tìm kiếm lọc phía client; grid `repeat(auto-fill, minmax(220px,1fr))` (mobile 2 cột, ≥1024px 4 cột). ProductCard: ảnh vuông 1:1 `object-fit: cover`, `loading="lazy"`, tên (2 dòng, ellipsis), mô tả ngắn, giá đỏ đậm `5.990.000 ₫`, nút "Xem chi tiết". Chưa có ảnh → `placeholder-product.svg`. Trạng thái tải: skeleton; rỗng: "Đang cập nhật sản phẩm".
-- **ProductModal**: overlay tối, đóng bằng nút ×, phím Esc, bấm nền; khóa cuộn body; trên desktop 2 cột (gallery trái, thông tin phải), mobile toàn màn hình 1 cột. Gallery: ảnh lớn + dãy thumbnail; bấm ảnh lớn → xem toàn màn hình (lightbox, vuốt/phím ←→). Thông tin: tên, giá, mô tả chi tiết (text, `pre-line`), bảng thông số, nút "Liên hệ mua: <SĐT>" (tel:) và "Chat Zalo". Mở modal cập nhật `?sp=slug` (router.replace) để chia sẻ link.
+- **ProductModal**: overlay tối, đóng bằng nút ×, phím Esc, bấm nền; khóa cuộn body; trên desktop 2 cột (gallery trái, thông tin phải), mobile toàn màn hình 1 cột. Gallery: ảnh lớn + dãy thumbnail; bấm ảnh lớn → xem toàn màn hình (lightbox, nút/phím ←→, Esc đóng; vuốt cảm ứng **không bắt buộc**). Thông tin: tên, giá, mô tả chi tiết (text, `pre-line`), bảng thông số, nút "Liên hệ mua: <SĐT>" (tel:) và "Chat Zalo". Mở modal cập nhật `?sp=slug` (router.replace) để chia sẻ link.
 - **Footer** (SiteFooter): 3 cột — (1) tên + giới thiệu; (2) địa chỉ, SĐT, email, giờ làm việc; (3) "Kết nối với chúng tôi": 4 nút SocialButtons tròn có icon SVG inline + nhãn: Facebook (#1877F2), TikTok (#000), Zalo (#0068FF), Shopee (#EE4D2D), `target="_blank" rel="noopener noreferrer"`, ẩn nút nếu link rỗng. Dòng cuối: © năm + tên công ty · link nhỏ "Đăng nhập nội bộ".
 - **Bảo hành**: card giữa trang, PhoneInput (`inputmode="tel"`), nút "Tra cứu"; kết quả: tên & SĐT đã che, mỗi đơn là 1 card: mã đơn, ngày mua, danh sách SP (+serial), "Hạn bảo hành: dd/MM/yyyy", badge xanh "Còn bảo hành · còn N ngày" / xám "Hết bảo hành". Không có đơn: "Không tìm thấy đơn hàng với số điện thoại này. Vui lòng liên hệ <SĐT công ty>". 429: "Bạn thao tác quá nhanh, vui lòng thử lại sau ít phút".
 - **Đăng nhập**: form username/mật khẩu (hiện/ẩn mật khẩu), lỗi chung, nút loading.
@@ -562,8 +566,8 @@ Mỗi SP có mô tả ngắn/chi tiết và 3–5 thông số (`specs`).
 | Smoke thủ công | Luồng: xem trang chủ → modal → tra bảo hành `0912345678` → đăng nhập admin → tạo user → đăng nhập user → nhập đơn → tra lại bảo hành → user truy cập `/noi-bo/tai-khoan` bị chặn | |
 
 ### 9.2 Triển khai
-1. Agent 4 apply `0001_init.sql`, `0002_rls.sql` (và tùy chọn `seed/demo.sql`) lên Supabase project `lzmhasrctmekzlkngrah` qua MCP; kiểm `list_tables` + `get_advisors`.
-2. Tạo Render Web Service (Docker, free, Singapore) từ repo `anhthu1205/web-app-donghai` nhánh `main` (qua Render API hoặc `render.yaml`), auto-deploy on push.
+1. Agent 4 apply `0001_init.sql`, `0002_rls.sql` (và tùy chọn `seed/demo.sql`) lên Supabase project `lzmhasrctmekzlkngrah` qua MCP; kiểm `list_tables` + `get_advisors`. Kiểm thêm backend không bị RLS chặn: `SELECT rolbypassrls FROM pg_roles WHERE rolname='postgres'` = true **hoặc** chủ sở hữu các bảng (`pg_tables.tableowner`) là `postgres`.
+2. Tạo Render Web Service (Docker, free, Singapore) từ repo `anhthu1205/WEB-APP-DONGHAI` nhánh `main` (qua Render API hoặc `render.yaml`), auto-deploy on push.
 3. Biến môi trường:
 
 | Biến | Bắt buộc | Ví dụ / Mặc định | Ghi chú |
@@ -595,8 +599,17 @@ Mỗi SP có mô tả ngắn/chi tiết và 3–5 thông số (`specs`).
 | R5 | pgx + pooler: transaction pooler (6543) không hỗ trợ prepared statement | Dùng session pooler 5432; nếu buộc dùng 6543 thì đặt `default_query_exec_mode=simple_protocol` trong `DATABASE_URL` |
 | R6 | Rate limit in-memory mất khi restart, chỉ đúng với 1 instance | Phù hợp gói free 1 instance |
 | R7 | Khách viết "3 nút" nhưng liệt kê 4 MXH | Làm 4 nút, ẩn nút nếu link rỗng |
-| R8 | "User chỉ xem + nhập" — giả định user được **thêm** khách/đơn nhưng không sửa/xóa; sửa/xóa do admin | Agent 2 xác nhận; dễ nới quyền sau (đổi nhóm route) |
+| R8 | "User chỉ xem + nhập" — user được **thêm** khách/đơn nhưng không sửa/xóa; sửa/xóa do admin | **Đã chốt (Agent 2): ĐÚNG ý khách** ("chỉ có quyền xem, nhập thông tin khách"). Dễ nới quyền sau (đổi nhóm route) |
 | R9 | Bảo hành tính theo đơn (cùng ngày mua cho mọi dòng), 2 năm cố định cho mọi SP | Hằng số `WarrantyYears`; mở rộng theo SP sau nếu cần (thêm cột `warranty_months`) |
 | R10 | Chỉ 1 admin (tạo từ env); API tạo tài khoản chỉ tạo role `user` | Đúng yêu cầu; nếu cần nhiều admin, bổ sung sau |
 | R11 | JWT lưu localStorage có rủi ro XSS | CSP chặt, cấm `v-html`, không dùng script bên thứ ba |
 | R12 | Tên miền chưa có — dùng `*.onrender.com` | Gắn domain riêng sau trên Render |
+| R13 | Admin quên mật khẩu (chỉ có 1 admin, không có API khôi phục) | README ghi thủ tục SQL trên Supabase: `UPDATE users SET password_hash = extensions.crypt('<MK_MỚI>', extensions.gen_salt('bf',12)), token_version = token_version + 1 WHERE username='admin';` (hash `$2a$` tương thích `x/crypto/bcrypt`) |
+
+---
+
+## Lịch sử sửa đổi
+| Ngày | Người sửa | Nội dung |
+|---|---|---|
+| 2026-11-11 | Agent 1 | Bản đầu |
+| 2026-11-11 | Agent 2 (duyệt) | (1) Chốt phiên bản thư viện Go tương thích Go 1.24 + `GOTOOLCHAIN=local`; chốt phiên bản npm. (2) Runner migration: tự tạo `schema_migrations` trước, advisory lock trên 1 kết nối. (3) Xử lý ngày bảo hành theo ngày dân sự, `today` inject được, quy ước ngày cuối. (4) Bỏ `chi RealIP`, tự viết `clientIP`; loại `/api/images` khỏi rate limit chung. (5) Đơn giản hóa: bỏ API sắp xếp ảnh, bỏ `x/image/webp`, lightbox không bắt buộc vuốt. (6) `/api/images/{uuid}` sai định dạng → 404, hỗ trợ 304. (7) PATCH user không có `role`. (8) FE gửi đúng tập trường (vì `DisallowUnknownFields`). (9) Sửa tên repo ở 9.2; sửa ví dụ `days_left` 484 → 119 (đúng với today 2026-11-11); thêm kiểm tra RLS bypass trên Supabase; R8 chốt; thêm R13 khôi phục mật khẩu admin. |
