@@ -65,17 +65,17 @@ function quickLookup() {
   <section class="hero">
     <div class="container hero-in">
       <div class="copy">
-        <p class="kicker">{{ c?.name || 'Công ty Đông Hải' }}</p>
-        <h1>{{ c?.slogan || 'Thiết bị gia dụng chính hãng' }}</h1>
-        <p class="sub">Máy lọc nước, bếp từ, nồi cơm điện, quạt điều hòa… giá niêm yết rõ ràng, tư vấn và lắp đặt tận nơi.</p>
+        <p class="kicker">{{ c?.name || 'Đông Hải Lighting' }}</p>
+        <h1>{{ c?.slogan || 'Đèn đánh cá, đèn công trình, dự án chính hãng' }}</h1>
+        <p class="sub">Bảo hành 2 - 5 năm, 1 đổi 1 trong 6 tháng - giá niêm yết, Miễn phí vận chuyển.</p>
         <div class="ctas">
           <a href="#san-pham" class="btn btn-accent">Xem sản phẩm</a>
           <RouterLink to="/bao-hanh" class="btn btn-light"><AppIcon name="shield" /> Tra cứu bảo hành</RouterLink>
         </div>
         <ul class="promises">
           <li><AppIcon name="badge" :size="18" /> Hàng chính hãng</li>
-          <li><AppIcon name="shield" :size="18" /> Bảo hành 2 năm</li>
-          <li><AppIcon name="truck" :size="18" /> Giao và lắp tận nhà</li>
+          <li><AppIcon name="shield" :size="18" /> Bảo hành 2 - 5 năm</li>
+          <li><AppIcon name="truck" :size="18" /> Miễn phí vận chuyển</li>
         </ul>
       </div>
 

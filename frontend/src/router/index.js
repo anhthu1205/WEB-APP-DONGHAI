@@ -29,7 +29,7 @@ const routes = [
     path: '/',
     component: PublicLayout,
     children: [
-      { path: '', name: 'home', component: HomeView, meta: { title: 'Thiết bị gia dụng chính hãng' } },
+      { path: '', name: 'home', component: HomeView, meta: { title: 'Đèn đánh cá, đèn công trình chính hãng' } },
       { path: 'bao-hanh', name: 'warranty', component: () => import('../views/public/WarrantyView.vue'), meta: { title: 'Tra cứu bảo hành' } },
     ],
   },
