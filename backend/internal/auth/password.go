@@ -2,6 +2,7 @@ package auth
 
 import (
 	"fmt"
+	"sync"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -30,9 +31,16 @@ func CheckPassword(hash, pw string) bool {
 }
 
 // dummyHash dùng để so khớp giả khi không có user (cân bằng thời gian phản hồi).
-var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dong-hai-dummy-password"), bcrypt.MinCost)
+// Sinh lười với đúng BcryptCost để thời gian so khớp bằng với user thật.
+var (
+	dummyOnce sync.Once
+	dummyHash []byte
+)
 
 // BurnPasswordCheck tốn thời gian tương đương một lần so khớp (chống dò username).
 func BurnPasswordCheck(pw string) {
+	dummyOnce.Do(func() {
+		dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dong-hai-dummy-password"), BcryptCost)
+	})
 	_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(pw))
 }
