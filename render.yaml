@@ -1,0 +1,30 @@
+# Render Blueprint — 1 web service Docker (gói free, Singapore)
+services:
+  - type: web
+    name: web-app-donghai
+    runtime: docker
+    plan: free
+    region: singapore
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL # Supabase session pooler (cổng 5432) — khách tự điền
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD # chỉ dùng ở lần khởi động đầu — khách tự điền
+        sync: false
+      - key: JWT_TTL_HOURS
+        value: "12"
+      - key: MIGRATE_ON_START
+        value: "true"
+      - key: SEED_DEMO
+        value: "false"
+      - key: DB_MAX_CONNS
+        value: "5"
+      - key: LOG_LEVEL
+        value: info
