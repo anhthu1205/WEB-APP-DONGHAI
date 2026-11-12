@@ -200,4 +200,4 @@ Deploy đầu **dự kiến thất bại ở bước khởi động** vì `DATAB
 
 ## Cập nhật 2026-11-12: đổi địa chỉ web
 - Địa chỉ chính thức: **https://led-donghai.onrender.com** (service Render `led-donghai`, id `srv-dbqh933rjlhs7389oo10`, cùng repo/nhánh `main`, cùng database Supabase và cùng biến môi trường với service cũ).
-- Render không đổi được địa chỉ `*.onrender.com` của service đã tạo, nên đã tạo service mới. Service cũ `web-app-donghai` (https://web-app-donghai.onrender.com) chỉ giữ lại tạm thời, sẽ xóa khi khách đồng ý.
+- Render không đổi được địa chỉ `*.onrender.com` của service đã tạo, nên đã tạo service mới. Service cũ `web-app-donghai` (https://web-app-donghai.onrender.com) đã được xóa theo yêu cầu của khách (2026-11-12).
