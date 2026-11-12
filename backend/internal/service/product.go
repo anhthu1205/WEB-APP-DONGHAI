@@ -198,3 +198,39 @@ func (s *Service) DeleteProduct(ctx context.Context, id int64) error {
 		return err
 	})
 }
+
+// copySuffix được thêm vào tên SP bản sao.
+const copySuffix = " (bản sao)"
+
+// DuplicateProduct sao chép SP (admin): giữ mô tả, thông số, đơn vị, giá, thứ tự và toàn bộ ảnh;
+// tên thêm "(bản sao)", slug mới, bỏ trống SKU (SKU là duy nhất), và ẨN để admin sửa xong mới hiển thị.
+func (s *Service) DuplicateProduct(ctx context.Context, id int64) (*domain.Product, error) {
+	src, err := s.store.GetProductByID(ctx, id)
+	if err != nil {
+		return nil, notFound(err, "Không tìm thấy sản phẩm")
+	}
+	cp := *src
+	cp.ID, cp.SKU, cp.IsVisible, cp.Images, cp.MainImageID = 0, nil, false, nil, nil
+	// Sao chép một bản sao: giữ nguyên tên (không thành "(bản sao) (bản sao)"); slug vẫn được làm duy nhất.
+	base := strings.TrimSuffix(src.Name, copySuffix)
+	name := []rune(base)
+	if max := 200 - len([]rune(copySuffix)); len(name) > max {
+		name = name[:max]
+	}
+	cp.Name = strings.TrimSpace(string(name)) + copySuffix
+	if cp.Slug, err = s.uniqueSlug(ctx, cp.Name, 0); err != nil {
+		return nil, err
+	}
+	var newID int64
+	err = s.store.InTx(ctx, func(tx *serviceTx) error {
+		if newID, err = tx.InsertProduct(ctx, &cp); err != nil {
+			return err
+		}
+		_, err = tx.CopyImages(ctx, id, newID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.GetInternalProduct(ctx, newID)
+}

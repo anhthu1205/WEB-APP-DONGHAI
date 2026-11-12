@@ -1,5 +1,5 @@
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { productsApi } from '../../../api/products'
 import { useToastStore } from '../../../stores/toast'
@@ -23,6 +23,17 @@ const msg = ref('')
 const saving = ref(false)
 const deleting = ref(false)
 const busyDel = ref(false)
+const copying = ref(false)
+
+// Sao chép SP đang xem (kèm ảnh) rồi chuyển sang trang sửa bản sao
+async function duplicate() {
+  copying.value = true
+  try {
+    const c = await productsApi.duplicate(id.value)
+    toast.success('Đã tạo bản sao (đang ẩn). Sửa thông tin rồi bật Hiển thị để khách thấy.')
+    router.push('/noi-bo/san-pham/' + c.id)
+  } catch (e) { toast.error(e.message) } finally { copying.value = false }
+}
 
 async function load() {
   if (!id.value) return
@@ -39,6 +50,8 @@ async function reloadImages() {
   try { images.value = (await productsApi.get(id.value)).images || [] } catch { /* bỏ qua */ }
 }
 onMounted(load)
+// Cùng component được dùng lại khi chuyển sang SP khác (vd. sau khi sao chép) → tải lại
+watch(id, (n, o) => { if (n && o && n !== o) load() })
 
 async function save() {
   errs.value = {}; msg.value = ''
@@ -79,7 +92,10 @@ async function remove() {
     <RouterLink to="/noi-bo/san-pham" class="back small"><AppIcon name="left" :size="16" /> Danh sách sản phẩm</RouterLink>
     <div class="page-head">
       <div><h1>{{ id ? 'Sửa sản phẩm' : 'Thêm sản phẩm' }}</h1><p v-if="id && f.is_visible"><a :href="'/?sp=' + f.slug" target="_blank" rel="noopener">Xem trên trang chủ</a></p></div>
-      <button v-if="id" class="btn btn-ghost" style="color:var(--danger-600)" @click="deleting = true"><AppIcon name="trash" :size="16" /> Xóa sản phẩm</button>
+      <div v-if="id" class="row">
+        <button class="btn btn-ghost" :disabled="copying" @click="duplicate"><span v-if="copying" class="spinner" /><AppIcon v-else name="copy" :size="16" /> Sao chép</button>
+        <button class="btn btn-ghost" style="color:var(--danger-600)" @click="deleting = true"><AppIcon name="trash" :size="16" /> Xóa sản phẩm</button>
+      </div>
     </div>
     <StateBlock v-if="loading" kind="loading" />
     <StateBlock v-else-if="loadErr" kind="error" :title="loadErr.status === 404 ? 'Không tìm thấy sản phẩm' : 'Chưa tải được sản phẩm'" :text="loadErr.message" @retry="load" />

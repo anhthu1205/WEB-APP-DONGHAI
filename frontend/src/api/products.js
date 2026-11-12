@@ -8,6 +8,7 @@ export const productsApi = {
   update: (id, body) => http.put('/admin/products/' + id, body),
   setVisible: (id, isVisible) => http.patch(`/admin/products/${id}/visibility`, { is_visible: isVisible }),
   remove: (id) => http.del('/admin/products/' + id),
+  duplicate: (id) => http.post(`/admin/products/${id}/duplicate`),
   uploadImage: (id, blob, filename) => {
     const fd = new FormData()
     fd.append('file', blob, filename)

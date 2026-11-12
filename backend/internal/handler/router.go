@@ -108,6 +108,7 @@ func NewRouter(o Options) http.Handler {
 				ad.Use(mw.RequireAdmin)
 				ad.Post("/products", h.createProduct)
 				ad.Put("/products/{id}", h.updateProduct)
+				ad.Post("/products/{id}/duplicate", h.duplicateProduct)
 				ad.Patch("/products/{id}/visibility", h.setVisibility)
 				ad.Delete("/products/{id}", h.deleteProduct)
 				ad.Post("/products/{id}/images", h.uploadImage)

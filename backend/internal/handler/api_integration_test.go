@@ -562,6 +562,66 @@ func TestAPI(t *testing.T) {
 		e.expect(e.do("GET", "/api/public/logo", "", nil), 404, "T-LOGO7 sau xóa")
 	})
 
+	t.Run("T-DUP sao chép sản phẩm", func(t *testing.T) {
+		e.expect(e.upload(e.ta, 2, "a.png", pngBytes(t, 30, 20)), 201, "ảnh SP gốc 1")
+		e.expect(e.upload(e.ta, 2, "b.png", pngBytes(t, 20, 30)), 201, "ảnh SP gốc 2")
+		src := e.do("GET", "/api/internal/products/2", e.ta, nil).Map(t)
+
+		e.expect(e.do("POST", "/api/admin/products/2/duplicate", tUser, nil), 403, "T-DUP1 nhân viên")
+		e.expect(e.do("POST", "/api/admin/products/2/duplicate", "", nil), 401, "T-DUP1 không token")
+		e.expect(e.do("POST", "/api/admin/products/99999/duplicate", e.ta, nil), 404, "T-DUP2 SP không tồn tại")
+
+		d := e.do("POST", "/api/admin/products/2/duplicate", e.ta, nil)
+		e.expect(d, 201, "T-DUP3 sao chép")
+		dm := d.Map(t)
+		if dm["id"] == src["id"] || dm["name"] != src["name"].(string)+" (bản sao)" || dm["slug"] == src["slug"] ||
+			dm["is_visible"] != false || dm["sku"] != nil {
+			t.Errorf("T-DUP3 thông tin bản sao: %s", d.Body)
+		}
+		for _, k := range []string{"short_description", "description", "unit", "price_public", "price_internal"} {
+			if fmt.Sprint(dm[k]) != fmt.Sprint(src[k]) {
+				t.Errorf("T-DUP3 trường %s: %v ≠ %v", k, dm[k], src[k])
+			}
+		}
+		if fmt.Sprint(dm["specs"]) != fmt.Sprint(src["specs"]) {
+			t.Errorf("T-DUP3 specs: %v ≠ %v", dm["specs"], src["specs"])
+		}
+		si, di := src["images"].([]any), dm["images"].([]any)
+		if len(si) == 0 || len(di) != len(si) {
+			t.Fatalf("T-DUP4 số ảnh: gốc %d, bản sao %d", len(si), len(di))
+		}
+		mains := 0
+		for i := range di {
+			im := di[i].(map[string]any)
+			if im["id"] == si[i].(map[string]any)["id"] {
+				t.Errorf("T-DUP4 ảnh bản sao phải là bản ghi mới")
+			}
+			if im["is_main"] == true {
+				mains++
+			}
+		}
+		if mains != 1 {
+			t.Errorf("T-DUP4 bản sao phải có đúng 1 ảnh chính, có %d", mains)
+		}
+		// Bản sao đang ẩn → không có ở trang công khai
+		if bytes.Contains(e.do("GET", "/api/public/products", "", nil).Body, []byte(dm["slug"].(string))) {
+			t.Errorf("T-DUP5 bản sao ẩn không được hiện công khai")
+		}
+		// Sao chép lần 2 → slug khác nữa
+		d2 := e.do("POST", "/api/admin/products/2/duplicate", e.ta, nil).Map(t)
+		dd := e.do("POST", fmt.Sprintf("/api/admin/products/%v/duplicate", dm["id"]), e.ta, nil).Map(t)
+		if dd["name"] != dm["name"] {
+			t.Errorf("T-DUP6 chép bản sao không được cộng dồn hậu tố: %v", dd["name"])
+		}
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/products/%v", dd["id"]), e.ta, nil), 204, "dọn bản sao của bản sao")
+		if d2["slug"] == dm["slug"] {
+			t.Errorf("T-DUP6 slug trùng: %v", d2["slug"])
+		}
+		// Xóa SP gốc không ảnh hưởng ảnh bản sao (dọn bản sao thứ 2)
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/products/%v", d2["id"]), e.ta, nil), 204, "T-DUP7 xóa bản sao")
+		e.expect(e.do("GET", di[0].(map[string]any)["url"].(string), "", nil), 200, "T-DUP7 ảnh bản sao 1 vẫn còn")
+	})
+
 	t.Run("T-AD1..AD3 sản phẩm admin", func(t *testing.T) {
 		body := map[string]any{"name": "Máy lọc nước RO Đông Hải DH-9", "short_description": "x", "description": "y",
 			"specs": []map[string]string{{"label": "A", "value": "B"}}, "unit": "cái", "price_public": 100, "price_internal": 90, "is_visible": true, "sort_order": 9}

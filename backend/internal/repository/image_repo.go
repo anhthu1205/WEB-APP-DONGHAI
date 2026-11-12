@@ -97,3 +97,14 @@ func (s *Store) PromoteFirstImage(ctx context.Context, productID int64) error {
 		AND NOT EXISTS (SELECT 1 FROM product_images WHERE product_id = $1 AND is_main)`, productID)
 	return mapErr(err)
 }
+
+// CopyImages sao chép toàn bộ ảnh (cả dữ liệu, ảnh chính, thứ tự) từ SP from sang SP to; trả số ảnh đã chép.
+func (s *Store) CopyImages(ctx context.Context, from, to int64) (int, error) {
+	tag, err := s.q.Exec(ctx, `INSERT INTO product_images (product_id, data, mime_type, size_bytes, width, height, is_main, sort_order)
+		SELECT $2, data, mime_type, size_bytes, width, height, is_main, sort_order FROM product_images WHERE product_id = $1`,
+		from, to)
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	return int(tag.RowsAffected()), nil
+}

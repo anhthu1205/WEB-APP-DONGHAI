@@ -23,6 +23,20 @@ func (h *Handler) createProduct(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, toInternalProduct(p, true))
 }
 
+// duplicateProduct sao chép SP (kèm ảnh); bản sao ở trạng thái ẩn.
+func (h *Handler) duplicateProduct(w http.ResponseWriter, r *http.Request) {
+	id, ok := idParam(w, r, "id")
+	if !ok {
+		return
+	}
+	p, err := h.svc.DuplicateProduct(r.Context(), id)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toInternalProduct(p, true))
+}
+
 func (h *Handler) updateProduct(w http.ResponseWriter, r *http.Request) {
 	id, ok := idParam(w, r, "id")
 	if !ok {

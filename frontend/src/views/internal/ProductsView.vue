@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { productsApi } from '../../api/products'
 import { useAuthStore } from '../../stores/auth'
 import { useToastStore } from '../../stores/toast'
@@ -9,6 +10,7 @@ import StateBlock from '../../components/StateBlock.vue'
 import ProductPlaceholder from '../../components/ProductPlaceholder.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 const toast = useToastStore()
 const list = ref([])
 const loading = ref(true)
@@ -30,6 +32,15 @@ async function toggle(p) {
     await productsApi.setVisible(p.id, !p.is_visible)
     p.is_visible = !p.is_visible
     toast.success(p.is_visible ? 'Đã hiện sản phẩm trên trang chủ' : 'Đã ẩn sản phẩm khỏi trang chủ')
+  } catch (e) { toast.error(e.message) } finally { busyId.value = null }
+}
+// Sao chép SP (kèm ảnh) rồi mở trang sửa bản sao
+async function duplicate(p) {
+  busyId.value = p.id
+  try {
+    const c = await productsApi.duplicate(p.id)
+    toast.success('Đã tạo bản sao (đang ẩn). Sửa thông tin rồi bật Hiển thị để khách thấy.')
+    router.push('/noi-bo/san-pham/' + c.id)
   } catch (e) { toast.error(e.message) } finally { busyId.value = null }
 }
 onMounted(load)
@@ -63,6 +74,7 @@ onMounted(load)
               <td v-if="auth.isAdmin" class="right actions">
                 <div class="row" style="justify-content:flex-end">
                   <button class="btn btn-ghost btn-sm" :disabled="busyId === p.id" @click="toggle(p)">{{ p.is_visible ? 'Ẩn' : 'Hiện' }}</button>
+                  <button class="btn btn-ghost btn-sm icon-only" :disabled="busyId === p.id" title="Sao chép sản phẩm" :aria-label="'Sao chép ' + p.name" @click="duplicate(p)"><AppIcon name="copy" :size="16" /></button>
                   <RouterLink :to="'/noi-bo/san-pham/' + p.id" class="btn btn-ghost btn-sm"><AppIcon name="edit" :size="16" /> Sửa</RouterLink>
                 </div>
               </td>
@@ -78,4 +90,7 @@ onMounted(load)
 .prod { display: flex; align-items: center; gap: 12px; text-align: left; }
 .thumb { width: 48px; height: 48px; border-radius: 10px; overflow: hidden; flex: none; background: var(--mist); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; }
+.icon-only { width: 36px; padding: 0; justify-content: center; }
+.actions .row { flex-wrap: nowrap; gap: 6px; }
+td.num { white-space: nowrap; }
 </style>
