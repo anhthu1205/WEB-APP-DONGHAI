@@ -132,6 +132,20 @@ func (e *env) upload(token string, pid any, filename string, data []byte) *tu.Re
 	return tu.DoRaw(e.t, req)
 }
 
+// uploadTo gửi multipart "file" tới path bất kỳ.
+func (e *env) uploadTo(token, path, filename string, data []byte) *tu.Resp {
+	e.t.Helper()
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, _ := mw.CreateFormFile("file", filename)
+	_, _ = fw.Write(data)
+	_ = mw.Close()
+	req, _ := http.NewRequest("POST", e.url(path), &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+token)
+	return tu.DoRaw(e.t, req)
+}
+
 func TestAPI(t *testing.T) {
 	e := setup(t, handler.Limits{})
 	tUser := e.createUser("nhanvien1")
@@ -502,6 +516,50 @@ func TestAPI(t *testing.T) {
 		if len(cd.Orders) != 2 || cd.OrdersCount != 2 {
 			t.Errorf("T-SC13 admin phải thấy cả 2 đơn: %+v", cd)
 		}
+	})
+
+	t.Run("T-LOGO logo công ty", func(t *testing.T) {
+		if v := e.do("GET", "/api/public/company", "", nil).Map(t)["logo_url"]; v != nil {
+			t.Fatalf("T-LOGO1 chưa có logo phải là null: %v", v)
+		}
+		e.expect(e.do("GET", "/api/public/logo", "", nil), 404, "T-LOGO1 chưa có logo")
+		e.expect(e.uploadTo(tUser, "/api/admin/company/logo", "l.png", pngBytes(t, 64, 64)), 403, "T-LOGO2 nhân viên")
+		e.expect(e.uploadTo("", "/api/admin/company/logo", "l.png", pngBytes(t, 64, 64)), 401, "T-LOGO2 không token")
+		e.expect(e.uploadTo(e.ta, "/api/admin/company/logo", "l.png", []byte("hello, not an image at all")), 415, "T-LOGO3 không phải ảnh")
+		big := append(pngBytes(t, 10, 10), bytes.Repeat([]byte{0}, 3*1024*1024)...)
+		e.expect(e.uploadTo(e.ta, "/api/admin/company/logo", "big.png", big), 413, "T-LOGO3 quá 2MB")
+
+		up := e.uploadTo(e.ta, "/api/admin/company/logo", "l.png", pngBytes(t, 64, 64))
+		e.expect(up, 200, "T-LOGO4 tải logo")
+		u, _ := up.Map(t)["logo_url"].(string)
+		if !strings.HasPrefix(u, "/api/public/logo?v=") {
+			t.Fatalf("T-LOGO4 logo_url: %s", up.Body)
+		}
+		if pu := e.do("GET", "/api/public/company", "", nil).Map(t)["logo_url"]; pu != u {
+			t.Errorf("T-LOGO4 public company logo_url = %v, muốn %s", pu, u)
+		}
+		img := e.do("GET", u, "", nil)
+		e.expect(img, 200, "T-LOGO5 lấy logo")
+		if img.Header.Get("Content-Type") != "image/png" || !strings.Contains(img.Header.Get("Cache-Control"), "immutable") {
+			t.Errorf("T-LOGO5 header: %v", img.Header)
+		}
+		e.expect(e.do("GET", u, "", nil, "If-None-Match", img.Header.Get("ETag")), 304, "T-LOGO5 304")
+		if c := e.do("GET", "/api/public/logo", "", nil).Header.Get("Cache-Control"); strings.Contains(c, "immutable") {
+			t.Errorf("T-LOGO5 không có v thì không được cache lâu: %s", c)
+		}
+
+		up2 := e.uploadTo(e.ta, "/api/admin/company/logo", "l2.png", pngBytes(t, 32, 32))
+		e.expect(up2, 200, "T-LOGO6 thay logo")
+		if u2, _ := up2.Map(t)["logo_url"].(string); u2 == u {
+			t.Errorf("T-LOGO6 đổi logo phải đổi URL: %s", u2)
+		}
+		e.expect(e.do("DELETE", "/api/admin/company/logo", tUser, nil), 403, "T-LOGO7 nhân viên xóa")
+		del := e.do("DELETE", "/api/admin/company/logo", e.ta, nil)
+		e.expect(del, 200, "T-LOGO7 xóa logo")
+		if v := del.Map(t)["logo_url"]; v != nil {
+			t.Errorf("T-LOGO7 sau xóa logo_url phải null: %v", v)
+		}
+		e.expect(e.do("GET", "/api/public/logo", "", nil), 404, "T-LOGO7 sau xóa")
 	})
 
 	t.Run("T-AD1..AD3 sản phẩm admin", func(t *testing.T) {

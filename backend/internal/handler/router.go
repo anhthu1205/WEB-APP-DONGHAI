@@ -64,6 +64,7 @@ func NewRouter(o Options) http.Handler {
 
 		// Ảnh: ngoài rate limit chung (K6)
 		api.Get("/images/{uuid}", h.getImage)
+		api.Get("/public/logo", h.getLogo)
 
 		api.Group(func(g chi.Router) {
 			g.Use(mw.RateLimit(o.Limits.General))
@@ -113,6 +114,8 @@ func NewRouter(o Options) http.Handler {
 				ad.Patch("/images/{uuid}", h.setMainImage)
 				ad.Delete("/images/{uuid}", h.deleteImage)
 				ad.Put("/company", h.updateCompany)
+				ad.Post("/company/logo", h.uploadLogo)
+				ad.Delete("/company/logo", h.deleteLogo)
 				ad.Get("/promotions", h.listPromotions)
 				ad.Post("/promotions", h.createPromotion)
 				ad.Put("/promotions/{id}", h.updatePromotion)

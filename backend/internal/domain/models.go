@@ -38,6 +38,7 @@ type Company struct {
 	TiktokURL    string
 	ZaloURL      string
 	ShopeeURL    string
+	LogoVersion  *string // nil = chưa có logo riêng (dùng logo mặc định)
 	UpdatedBy    *int64
 	UpdatedAt    time.Time
 }

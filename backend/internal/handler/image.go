@@ -49,17 +49,13 @@ func (h *Handler) getImage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// uploadImage nhận multipart field "file" (1 ảnh/lần, ≤ 2 MB).
-func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
-	pid, ok := idParam(w, r, "id")
-	if !ok {
-		return
-	}
+// readUploadFile đọc trường multipart "file" (≤ service.MaxImageBytes). Trả false nếu đã ghi lỗi ra w.
+func readUploadFile(w http.ResponseWriter, r *http.Request) ([]byte, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, service.MaxImageBytes+64<<10)
 	mr, err := r.MultipartReader()
 	if err != nil {
 		mw.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "Yêu cầu phải là multipart/form-data với trường file")
-		return
+		return nil, false
 	}
 	var data []byte
 	for {
@@ -69,7 +65,7 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		}
 		if err != nil {
 			uploadReadError(w, err)
-			return
+			return nil, false
 		}
 		if part.FormName() != "file" {
 			_ = part.Close()
@@ -79,11 +75,11 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		_ = part.Close()
 		if err != nil {
 			uploadReadError(w, err)
-			return
+			return nil, false
 		}
 		if len(data) > service.MaxImageBytes {
 			mw.WriteError(w, http.StatusRequestEntityTooLarge, "PAYLOAD_TOO_LARGE", "Ảnh vượt quá 2 MB")
-			return
+			return nil, false
 		}
 		break
 	}
@@ -91,6 +87,19 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, mw.ErrorBody{Error: mw.ErrorDetail{
 			Code: "VALIDATION_ERROR", Message: "Dữ liệu không hợp lệ", Fields: map[string]string{"file": "Vui lòng chọn ảnh"},
 		}})
+		return nil, false
+	}
+	return data, true
+}
+
+// uploadImage nhận multipart field "file" (1 ảnh/lần, ≤ 2 MB).
+func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
+	pid, ok := idParam(w, r, "id")
+	if !ok {
+		return
+	}
+	data, ok := readUploadFile(w, r)
+	if !ok {
 		return
 	}
 	im, err := h.svc.UploadImage(r.Context(), pid, data)
@@ -99,6 +108,61 @@ func (h *Handler) uploadImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toInternalImage(im))
+}
+
+// getLogo phục vụ logo. URL có ?v=<version> khớp → cache 1 năm (immutable); không có v → cache ngắn.
+func (h *Handler) getLogo(w http.ResponseWriter, r *http.Request) {
+	mime, ver, data, err := h.svc.GetLogo(r.Context())
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	etag := `"logo-` + ver + `"`
+	cache := "public, max-age=300"
+	if r.URL.Query().Get("v") == ver {
+		cache = "public, max-age=31536000, immutable"
+	}
+	hd := w.Header()
+	hd.Set("Cache-Control", cache)
+	hd.Set("ETag", etag)
+	if inm := r.Header.Get("If-None-Match"); inm != "" {
+		for _, t := range strings.Split(inm, ",") {
+			if strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(t), "W/")) == etag {
+				w.WriteHeader(http.StatusNotModified)
+				return
+			}
+		}
+	}
+	hd.Set("Content-Type", mime)
+	hd.Set("Content-Length", strconv.Itoa(len(data)))
+	w.WriteHeader(http.StatusOK)
+	if r.Method != http.MethodHead {
+		_, _ = w.Write(data)
+	}
+}
+
+// uploadLogo thay logo công ty (admin).
+func (h *Handler) uploadLogo(w http.ResponseWriter, r *http.Request) {
+	data, ok := readUploadFile(w, r)
+	if !ok {
+		return
+	}
+	c, err := h.svc.UploadLogo(r.Context(), mw.UserFromContext(r.Context()), data)
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toPublicCompany(c))
+}
+
+// deleteLogo xóa logo riêng, quay về logo mặc định (admin).
+func (h *Handler) deleteLogo(w http.ResponseWriter, r *http.Request) {
+	c, err := h.svc.DeleteLogo(r.Context())
+	if err != nil {
+		writeError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toPublicCompany(c))
 }
 
 func uploadReadError(w http.ResponseWriter, err error) {

@@ -40,6 +40,7 @@ type PublicCompanyDTO struct {
 	Email        string     `json:"email"`
 	WorkingHours string     `json:"working_hours"`
 	Socials      SocialsDTO `json:"socials"`
+	LogoURL      *string    `json:"logo_url"` // null = dùng logo mặc định
 }
 
 func toPublicCompany(c *domain.Company) PublicCompanyDTO {
@@ -47,7 +48,16 @@ func toPublicCompany(c *domain.Company) PublicCompanyDTO {
 		Name: c.Name, Slogan: c.Slogan, About: c.About, Address: c.Address, Phone: c.Phone,
 		Email: c.Email, WorkingHours: c.WorkingHours,
 		Socials: SocialsDTO{Facebook: c.FacebookURL, Tiktok: c.TiktokURL, Zalo: c.ZaloURL, Shopee: c.ShopeeURL},
+		LogoURL: logoURL(c.LogoVersion),
 	}
+}
+
+func logoURL(ver *string) *string {
+	if ver == nil {
+		return nil
+	}
+	u := "/api/public/logo?v=" + *ver
+	return &u
 }
 
 // PublicProductDTO là SP trong danh sách công khai.

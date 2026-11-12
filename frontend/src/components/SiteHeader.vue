@@ -20,7 +20,7 @@ const links = [
   <header class="hdr">
     <div class="container bar">
       <RouterLink to="/" class="brand" aria-label="Đông Hải — trang chủ" @click="open = false">
-        <img src="/favicon.svg" alt="" width="36" height="36" />
+        <img :src="company.logoUrl" alt="" height="36" class="logo" />
         <span class="name">Đông Hải</span>
       </RouterLink>
       <nav class="nav" :class="{ open }" aria-label="Điều hướng chính">
@@ -63,4 +63,5 @@ const links = [
   .nav.open { display: flex; }
   .nav-link { padding: 12px 14px; }
 }
+.logo { height: 36px; width: auto; max-width: 160px; object-fit: contain; flex-shrink: 0; border-radius: 8px; }
 </style>

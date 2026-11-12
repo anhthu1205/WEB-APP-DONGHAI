@@ -2,6 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useCompanyStore } from '../stores/company'
 import AppIcon from '../components/AppIcon.vue'
 
 const auth = useAuthStore()
@@ -42,12 +43,14 @@ function logout() {
   auth.logout()
   router.replace('/dang-nhap')
 }
+const company = useCompanyStore()
+company.load()
 </script>
 
 <template>
   <div class="shell" :class="{ open: drawer }">
     <aside class="side" aria-label="Menu nội bộ">
-      <RouterLink to="/noi-bo" class="brand"><img src="/favicon.svg" alt="" width="32" height="32" /><span>Đông Hải<small>Nội bộ</small></span></RouterLink>
+      <RouterLink to="/noi-bo" class="brand"><img :src="company.logoUrl" alt="" height="32" class="logo" /><span>Đông Hải<small>Nội bộ</small></span></RouterLink>
       <nav>
         <div v-for="(g, gi) in groups" :key="gi" class="group">
           <p v-if="g.label" class="g-label">{{ g.label }}</p>
@@ -106,4 +109,5 @@ nav { display: flex; flex-direction: column; gap: 18px; flex: 1; }
   .content { padding: 16px; }
 }
 @media (max-width: 520px) { .who { display: none; } }
+.logo { height: 32px; width: auto; max-width: 120px; object-fit: contain; flex-shrink: 0; border-radius: 8px; }
 </style>

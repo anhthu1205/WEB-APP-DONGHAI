@@ -15,7 +15,7 @@ const year = new Date().getFullYear()
     <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30c120-20 240-20 360 0s240 20 360 0 240-20 360 0 240 20 360 0v30H0z" /></svg>
     <div class="container grid">
       <section class="about">
-        <div class="brand"><img src="/favicon.svg" alt="" width="40" height="40" /><h2>{{ c?.name || 'Công ty Đông Hải' }}</h2></div>
+        <div class="brand"><img :src="company.logoUrl" alt="" height="40" class="logo" /><h2>{{ c?.name || 'Công ty Đông Hải' }}</h2></div>
         <p v-if="c?.slogan" class="slogan">{{ c.slogan }}</p>
         <p v-if="c?.about" class="txt">{{ c.about }}</p>
       </section>
@@ -58,4 +58,5 @@ h3 { color: #fff; font-size: 15px; font-weight: 700; margin-bottom: 14px; }
   background: linear-gradient(rgba(255,255,255,.12), rgba(255,255,255,.12)) top center / calc(100% - 2 * var(--gutter)) 1px no-repeat; }
 .staff { color: rgba(255,255,255,.6); }
 .staff:hover { color: #fff; }
+.logo { height: 40px; width: auto; max-width: 180px; object-fit: contain; flex-shrink: 0; border-radius: 8px; }
 </style>

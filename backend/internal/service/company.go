@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/mail"
 	"net/url"
 	"strings"
@@ -78,4 +80,39 @@ func (s *Service) UpdateCompany(ctx context.Context, me *domain.User, in Company
 		return nil, err
 	}
 	return s.store.GetCompany(ctx)
+}
+
+// MaxLogoBytes là dung lượng tối đa của logo.
+const MaxLogoBytes = MaxImageBytes
+
+// LogoVersion là hash ngắn của nội dung logo (dùng cho ETag và ?v= trên URL).
+func LogoVersion(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:8])
+}
+
+// GetLogo trả mime, version, bytes logo; chưa có logo → 404.
+func (s *Service) GetLogo(ctx context.Context) (string, string, []byte, error) {
+	mime, ver, data, err := s.store.GetLogo(ctx)
+	return mime, ver, data, notFound(err, "Chưa có logo")
+}
+
+// UploadLogo thay logo (admin). Chỉ JPEG/PNG/WebP thật (kiểm tra nội dung), ≤ 2 MB.
+func (s *Service) UploadLogo(ctx context.Context, me *domain.User, data []byte) (*domain.Company, error) {
+	mime, _, _, err := DetectImage(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.UpsertLogo(ctx, mime, LogoVersion(data), data, me.ID); err != nil {
+		return nil, err
+	}
+	return s.GetCompany(ctx)
+}
+
+// DeleteLogo xóa logo riêng, quay về logo mặc định (admin).
+func (s *Service) DeleteLogo(ctx context.Context) (*domain.Company, error) {
+	if err := s.store.DeleteLogo(ctx); err != nil {
+		return nil, err
+	}
+	return s.GetCompany(ctx)
 }
