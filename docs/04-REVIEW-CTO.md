@@ -13,7 +13,7 @@
 - Code đáp ứng đủ yêu cầu khách: trang chủ kiểu TMĐT + modal sản phẩm, footer 4 nút Facebook/TikTok/Zalo/Shopee, tra bảo hành theo SĐT (2 năm kể từ ngày mua), khu nội bộ bắt buộc đăng nhập, phân quyền admin/user, trang ẩn "Khuyến mãi & bảng giá". Go + Vue 3 + Supabase (Postgres), FE/BE tách bạch rõ ràng.
 - Mọi ca **Chặn** kiểm được trong sandbox đều PASS. Đã sửa 1 lỗi bảo mật mức nhẹ (mục 3).
 - Supabase: đã áp migration, RLS bật trên 10/10 bảng, anon/authenticated không có quyền, advisor không có cảnh báo mức ERROR.
-- Render: đã tạo service https://web-app-donghai.onrender.com — **build Docker trên Render THÀNH CÔNG**; app dừng ở bước khởi động vì chưa có `DATABASE_URL` (đúng dự kiến).
+- Render: đã tạo service https://led-donghai.onrender.com — **build Docker trên Render THÀNH CÔNG**; app dừng ở bước khởi động vì chưa có `DATABASE_URL` (đúng dự kiến).
 - **Điều kiện còn lại** (khách phải làm, xem mục 6): nhập `DATABASE_URL` (chuỗi Session pooler Supabase) vào Render rồi Manual Deploy. Sau đó kiểm tra D3 (`/api/health` 200 trên onrender.com, IP client thật trong log).
 
 ---
@@ -161,7 +161,7 @@ Không phát hiện lỗi chặn nào khác.
 | Mục | Giá trị |
 |---|---|
 | Service | `web-app-donghai` (id `srv-dbq4hjpsrm7s739g61jg`) |
-| URL | **https://web-app-donghai.onrender.com** |
+| URL | **https://led-donghai.onrender.com** |
 | Dashboard | https://dashboard.render.com/web/srv-dbq4hjpsrm7s739g61jg |
 | Cấu hình | Web Service, runtime Docker (`./Dockerfile`), gói **free**, region **singapore**, repo `anhthu1205/WEB-APP-DONGHAI` nhánh `main`, autoDeploy bật, health check `/api/health` |
 | Biến môi trường | `JWT_SECRET` (64 ký tự ngẫu nhiên), `ADMIN_USERNAME=admin`, `ADMIN_PASSWORD` (ngẫu nhiên, đã giao riêng cho khách — **không** ghi trong repo), `JWT_TTL_HOURS=12`, `MIGRATE_ON_START=true`, `SEED_DEMO=true`, `DB_MAX_CONNS=5`, `LOG_LEVEL=info`, `DATABASE_URL` = **rỗng (khách tự nhập)** |
@@ -180,8 +180,8 @@ Deploy đầu **dự kiến thất bại ở bước khởi động** vì `DATAB
    - Thay `[YOUR-PASSWORD]` bằng mật khẩu database (quên thì: **Project Settings → Database → Reset database password**). Nếu mật khẩu có ký tự đặc biệt (`@ : / ? #`…) thì nên đặt lại mật khẩu chỉ gồm chữ + số cho dễ.
    - Thêm `?sslmode=require` vào cuối chuỗi.
 2. **Dán vào Render**: https://dashboard.render.com/web/srv-dbq4hjpsrm7s739g61jg → **Environment** → dòng `DATABASE_URL` → **Edit** → dán chuỗi → **Save Changes**.
-3. **Deploy**: chọn **Save, rebuild, and deploy** (hoặc **Manual Deploy → Deploy latest commit**). Đợi 3–5 phút đến khi trạng thái **Live**. Kiểm tra https://web-app-donghai.onrender.com/api/health trả `{"status":"ok"}`.
-4. **Đăng nhập admin**: mở https://web-app-donghai.onrender.com/dang-nhap (link "Đăng nhập nội bộ" ở chân trang), tên đăng nhập `admin`, mật khẩu ban đầu được gửi riêng (không nằm trong tài liệu/repo; cũng xem được ở Render → Environment → `ADMIN_PASSWORD`).
+3. **Deploy**: chọn **Save, rebuild, and deploy** (hoặc **Manual Deploy → Deploy latest commit**). Đợi 3–5 phút đến khi trạng thái **Live**. Kiểm tra https://led-donghai.onrender.com/api/health trả `{"status":"ok"}`.
+4. **Đăng nhập admin**: mở https://led-donghai.onrender.com/dang-nhap (link "Đăng nhập nội bộ" ở chân trang), tên đăng nhập `admin`, mật khẩu ban đầu được gửi riêng (không nằm trong tài liệu/repo; cũng xem được ở Render → Environment → `ADMIN_PASSWORD`).
 5. **Đổi mật khẩu ngay**: menu **Đổi mật khẩu**. Sau đó có thể xóa biến `ADMIN_PASSWORD` trên Render (chỉ dùng ở lần đầu; đổi env về sau **không** ghi đè mật khẩu).
 6. **Dữ liệu demo**: lần đầu app nạp 8 SP, 3 KM, 5 khách, 8 đơn mẫu để xem thử. Muốn dùng thật: đặt `SEED_DEMO=false` trên Render (để không seed lại), rồi xóa/sửa dữ liệu mẫu trong khu nội bộ (hoặc nhờ kỹ thuật xóa bằng SQL trên Supabase). Lưu ý: seed chỉ chạy khi bảng sản phẩm rỗng.
 7. **Thông tin công ty & mạng xã hội**: admin → **Thông tin công ty** → nhập tên, địa chỉ, SĐT, email, giờ làm việc và link thật Facebook/TikTok/Zalo/Shopee (bắt buộc bắt đầu bằng `https://`; để trống thì nút ẩn).
@@ -197,3 +197,7 @@ Deploy đầu **dự kiến thất bại ở bước khởi động** vì `DATAB
 - Sao lưu: bật/tải backup Supabase định kỳ (dữ liệu khách hàng + ảnh nằm trong DB).
 - Vitest cho `formatVND`/`phone.js`, Lighthouse a11y (mục NÊN chưa làm).
 - Tên miền riêng (vd `donghai.vn`) trỏ về Render khi sẵn sàng.
+
+## Cập nhật 2026-11-12: đổi địa chỉ web
+- Địa chỉ chính thức: **https://led-donghai.onrender.com** (service Render `led-donghai`, id `srv-dbqh933rjlhs7389oo10`, cùng repo/nhánh `main`, cùng database Supabase và cùng biến môi trường với service cũ).
+- Render không đổi được địa chỉ `*.onrender.com` của service đã tạo, nên đã tạo service mới. Service cũ `web-app-donghai` (https://web-app-donghai.onrender.com) chỉ giữ lại tạm thời, sẽ xóa khi khách đồng ý.

@@ -1,7 +1,7 @@
 # Render Blueprint — 1 web service Docker (gói free, Singapore)
 services:
   - type: web
-    name: web-app-donghai
+    name: led-donghai
     runtime: docker
     plan: free
     region: singapore
