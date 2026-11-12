@@ -28,6 +28,7 @@ const groups = computed(() => {
     g.push({
       label: 'Quản trị',
       items: [
+        { to: '/noi-bo/danh-muc', label: 'Danh mục sản phẩm', icon: 'folder' },
         { to: '/noi-bo/khuyen-mai', label: 'Quản lý khuyến mãi', icon: 'star' },
         { to: '/noi-bo/cong-ty', label: 'Thông tin công ty', icon: 'building' },
         { to: '/noi-bo/tai-khoan', label: 'Tài khoản', icon: 'lock' },

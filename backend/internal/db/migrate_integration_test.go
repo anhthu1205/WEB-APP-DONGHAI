@@ -20,8 +20,8 @@ func TestMigrateTwiceAndSeed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(applied) != 3 {
-		t.Fatalf("lần 1 phải áp dụng 3 migration, được %v", applied)
+	if len(applied) != 4 {
+		t.Fatalf("lần 1 phải áp dụng 4 migration, được %v", applied)
 	}
 	applied, err = db.Migrate(ctx, pool, migrations.FS, nil)
 	if err != nil {
@@ -31,8 +31,8 @@ func TestMigrateTwiceAndSeed(t *testing.T) {
 		t.Fatalf("lần 2 không được chạy lại, được %v", applied)
 	}
 	var n int
-	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 3 {
-		t.Fatalf("schema_migrations phải có 3 dòng, được %d (%v)", n, err)
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM schema_migrations`).Scan(&n); err != nil || n != 4 {
+		t.Fatalf("schema_migrations phải có 4 dòng, được %d (%v)", n, err)
 	}
 	// RLS bật trên mọi bảng
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_class c JOIN pg_namespace ns ON ns.oid = c.relnamespace

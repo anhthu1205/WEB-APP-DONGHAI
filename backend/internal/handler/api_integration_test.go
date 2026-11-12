@@ -622,6 +622,133 @@ func TestAPI(t *testing.T) {
 		e.expect(e.do("GET", di[0].(map[string]any)["url"].(string), "", nil), 200, "T-DUP7 ảnh bản sao 1 vẫn còn")
 	})
 
+	t.Run("T-CAT danh mục sản phẩm", func(t *testing.T) {
+		type cat struct {
+			ID           int64   `json:"id"`
+			Slug         string  `json:"slug"`
+			Name         string  `json:"name"`
+			CoverURL     *string `json:"cover_url"`
+			ProductCount int     `json:"product_count"`
+			ShowInMenu   bool    `json:"show_in_menu"`
+			ShowOnHome   bool    `json:"show_on_home"`
+			IsVisible    bool    `json:"is_visible"`
+		}
+		var pub []cat
+		e.do("GET", "/api/public/categories", "", nil).JSON(t, &pub)
+		if len(pub) != 1 || pub[0].Slug != "den-du-an" || pub[0].ProductCount != 0 {
+			t.Fatalf("T-CAT1 danh mục mặc định: %+v", pub)
+		}
+		dda := pub[0].ID
+
+		e.expect(e.do("POST", "/api/admin/categories", tUser, map[string]any{"name": "X"}), 403, "T-CAT2 nhân viên")
+		e.expect(e.do("POST", "/api/admin/categories", e.ta, map[string]any{"name": ""}), 400, "T-CAT2 thiếu tên")
+		e.expect(e.do("POST", "/api/admin/categories", e.ta, map[string]any{"name": "Y", "slug": "den-du-an"}), 409, "T-CAT2 trùng slug")
+		var nc cat
+		r := e.do("POST", "/api/admin/categories", e.ta, map[string]any{"name": "Đèn năng lượng mặt trời", "description": "NLMT"})
+		e.expect(r, 201, "T-CAT3 tạo danh mục")
+		r.JSON(t, &nc)
+		if nc.Slug != "den-nang-luong-mat-troi" || !nc.IsVisible || !nc.ShowInMenu || nc.ShowOnHome {
+			t.Errorf("T-CAT3 mặc định: %+v", nc)
+		}
+
+		// Chuyển SP 3 sang Đèn dự án
+		prod := e.do("GET", "/api/internal/products/3", e.ta, nil).Map(t)
+		body := map[string]any{}
+		for _, k := range []string{"name", "sku", "short_description", "description", "specs", "unit", "price_public", "price_internal", "is_visible", "sort_order"} {
+			body[k] = prod[k]
+		}
+		slug3 := prod["slug"].(string)
+		body["category_id"] = 99999
+		e.expect(e.do("PUT", "/api/admin/products/3", e.ta, body), 400, "T-CAT4 danh mục không tồn tại")
+		body["category_id"] = dda
+		up := e.do("PUT", "/api/admin/products/3", e.ta, body)
+		e.expect(up, 200, "T-CAT4 gán danh mục")
+		if up.Map(t)["category_name"] != "Đèn dự án" {
+			t.Errorf("T-CAT4 category_name: %s", up.Body)
+		}
+		home := func() string { return string(e.do("GET", "/api/public/products", "", nil).Body) }
+		if strings.Contains(home(), `"slug":"`+slug3+`"`) {
+			t.Errorf("T-CAT5 SP đèn dự án không được hiện ở trang chủ")
+		}
+		var page struct {
+			Category cat `json:"category"`
+			Products []struct {
+				Slug  string `json:"slug"`
+				Price int64  `json:"price"`
+			} `json:"products"`
+		}
+		pg := e.do("GET", "/api/public/categories/den-du-an", "", nil)
+		e.expect(pg, 200, "T-CAT6 trang danh mục")
+		pg.JSON(t, &page)
+		if page.Category.ProductCount != 1 || len(page.Products) != 1 || page.Products[0].Slug != slug3 {
+			t.Errorf("T-CAT6 SP trong danh mục: %s", pg.Body)
+		}
+		if bytes.Contains(pg.Body, []byte("price_internal")) {
+			t.Errorf("T-CAT6 lộ giá nội bộ")
+		}
+		e.expect(e.do("GET", "/api/public/products/"+slug3, "", nil), 200, "T-CAT6 chi tiết SP vẫn mở được")
+
+		// Bật hiện ở trang chủ
+		cb := map[string]any{"name": "Đèn dự án", "description": "x", "show_on_home": true, "sort_order": 1}
+		e.expect(e.do("PUT", fmt.Sprintf("/api/admin/categories/%d", dda), e.ta, cb), 200, "T-CAT7 bật show_on_home")
+		if !strings.Contains(home(), `"slug":"`+slug3+`"`) {
+			t.Errorf("T-CAT7 show_on_home phải hiện SP ở trang chủ")
+		}
+		// Ẩn danh mục → trang 404, SP ẩn khỏi khách
+		cb["is_visible"] = false
+		hid := e.do("PUT", fmt.Sprintf("/api/admin/categories/%d", dda), e.ta, cb)
+		e.expect(hid, 200, "T-CAT8 ẩn danh mục")
+		if hid.Map(t)["slug"] != "den-du-an" {
+			t.Errorf("T-CAT8 sửa không gửi slug phải giữ slug cũ: %s", hid.Body)
+		}
+		e.expect(e.do("GET", "/api/public/categories/den-du-an", "", nil), 404, "T-CAT8 trang danh mục ẩn")
+		e.expect(e.do("GET", "/api/public/products/"+slug3, "", nil), 404, "T-CAT8 SP trong danh mục ẩn")
+		if strings.Contains(home(), `"slug":"`+slug3+`"`) || bytes.Contains(e.do("GET", "/api/public/categories", "", nil).Body, []byte("den-du-an")) {
+			t.Errorf("T-CAT8 danh mục ẩn vẫn lộ ra ngoài")
+		}
+		var ic []cat
+		e.do("GET", "/api/internal/categories", tUser, nil).JSON(t, &ic)
+		if len(ic) != 2 {
+			t.Errorf("T-CAT9 nội bộ phải thấy cả danh mục ẩn: %+v", ic)
+		}
+		cb["is_visible"], cb["show_on_home"] = true, false
+		e.expect(e.do("PUT", fmt.Sprintf("/api/admin/categories/%d", dda), e.ta, cb), 200, "khôi phục danh mục")
+
+		// Sao chép SP giữ danh mục
+		dup := e.do("POST", "/api/admin/products/3/duplicate", e.ta, nil).Map(t)
+		if dup["category_name"] != "Đèn dự án" {
+			t.Errorf("T-CAT10 bản sao phải giữ danh mục: %v", dup["category_name"])
+		}
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/products/%v", dup["id"]), e.ta, nil), 204, "dọn bản sao")
+
+		// Ảnh bìa
+		e.expect(e.uploadTo(tUser, fmt.Sprintf("/api/admin/categories/%d/cover", dda), "c.png", pngBytes(t, 40, 20)), 403, "T-CAT11 nhân viên")
+		cv := e.uploadTo(e.ta, fmt.Sprintf("/api/admin/categories/%d/cover", dda), "c.png", pngBytes(t, 40, 20))
+		e.expect(cv, 200, "T-CAT11 tải ảnh bìa")
+		var cc cat
+		cv.JSON(t, &cc)
+		if cc.CoverURL == nil {
+			t.Fatalf("T-CAT11 thiếu cover_url: %s", cv.Body)
+		}
+		img := e.do("GET", *cc.CoverURL, "", nil)
+		e.expect(img, 200, "T-CAT11 lấy ảnh bìa")
+		if img.Header.Get("Content-Type") != "image/png" || !strings.Contains(img.Header.Get("Cache-Control"), "immutable") {
+			t.Errorf("T-CAT11 header: %v", img.Header)
+		}
+		e.expect(e.do("GET", "/api/public/category-covers/abc", "", nil), 404, "T-CAT11 id sai")
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/categories/%d/cover", dda), e.ta, nil), 200, "T-CAT11 xóa ảnh bìa")
+		e.expect(e.do("GET", *cc.CoverURL, "", nil), 404, "T-CAT11 sau xóa")
+
+		// Xóa danh mục còn SP → 409; chuyển SP về sản phẩm chính rồi xóa được
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/categories/%d", dda), e.ta, nil), 409, "T-CAT12 còn SP")
+		body["category_id"] = nil
+		e.expect(e.do("PUT", "/api/admin/products/3", e.ta, body), 200, "trả SP về trang chủ")
+		if !strings.Contains(home(), `"slug":"`+slug3+`"`) {
+			t.Errorf("T-CAT12 SP chính phải hiện lại ở trang chủ")
+		}
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/categories/%d", nc.ID), e.ta, nil), 204, "T-CAT12 xóa danh mục rỗng")
+	})
+
 	t.Run("T-AD1..AD3 sản phẩm admin", func(t *testing.T) {
 		body := map[string]any{"name": "Máy lọc nước RO Đông Hải DH-9", "short_description": "x", "description": "y",
 			"specs": []map[string]string{{"label": "A", "value": "B"}}, "unit": "cái", "price_public": 100, "price_internal": 90, "is_visible": true, "sort_order": 9}

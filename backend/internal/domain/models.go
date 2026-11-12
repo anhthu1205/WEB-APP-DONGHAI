@@ -43,6 +43,22 @@ type Company struct {
 	UpdatedAt    time.Time
 }
 
+// Category là danh mục (ngách) sản phẩm, có trang riêng.
+type Category struct {
+	ID           int64
+	Name         string
+	Slug         string
+	Description  string
+	IsVisible    bool
+	ShowInMenu   bool
+	ShowOnHome   bool
+	SortOrder    int
+	CoverVersion *string // nil = chưa có ảnh bìa
+	ProductCount int     // số SP (công khai: SP đang hiển thị; nội bộ: tất cả)
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
+}
+
 // Spec là một dòng thông số kỹ thuật.
 type Spec struct {
 	Label string `json:"label"`
@@ -63,6 +79,9 @@ type Product struct {
 	PriceInternal    *int64
 	IsVisible        bool
 	SortOrder        int
+	CategoryID       *int64  // nil = sản phẩm chính (trang chủ)
+	CategoryName     *string // chỉ đọc (JOIN)
+	CategorySlug     *string // chỉ đọc (JOIN)
 	MainImageID      *string
 	Images           []ProductImage
 	CreatedAt        time.Time

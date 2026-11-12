@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
+import { useCategoriesStore } from '../stores/categories'
 import { telHref } from '../utils/format'
 import AppIcon from './AppIcon.vue'
 
@@ -9,11 +10,15 @@ const company = useCompanyStore()
 const route = useRoute()
 const open = ref(false)
 const phone = computed(() => company.data?.phone || '')
-const links = [
+const categories = useCategoriesStore()
+categories.load()
+const links = computed(() => [
   { to: { path: '/', hash: '#san-pham' }, label: 'Sản phẩm' },
+  ...categories.menu.map((c) => ({ to: { path: '/danh-muc/' + c.slug }, label: c.name })),
   { to: { path: '/bao-hanh' }, label: 'Bảo hành' },
-  { to: { path: route.path === '/bao-hanh' ? '/bao-hanh' : '/', hash: '#lien-he' }, label: 'Liên hệ' },
-]
+  // Liên hệ: chân trang có ở mọi trang công khai → cuộn tới #lien-he ngay trên trang hiện tại
+  { to: { path: route.path, hash: '#lien-he' }, label: 'Liên hệ' },
+])
 </script>
 
 <template>

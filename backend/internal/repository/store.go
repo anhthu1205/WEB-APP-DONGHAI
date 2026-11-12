@@ -49,6 +49,8 @@ var conflictMessages = map[string]string{
 	"users_username_key":              "Tên đăng nhập đã tồn tại",
 	"products_slug_key":               "Slug sản phẩm đã tồn tại",
 	"products_sku_key":                "Mã SKU đã tồn tại",
+	"categories_slug_key":             "Đường dẫn danh mục đã tồn tại",
+	"products_category_id_fkey":       "Danh mục còn sản phẩm, hãy chuyển sản phẩm sang danh mục khác trước khi xóa",
 	"customers_phone_key":             "Số điện thoại đã thuộc về khách hàng khác",
 	"uq_product_images_main":          "Sản phẩm đã có ảnh chính",
 	"order_items_product_id_fkey":     "Sản phẩm đã có đơn hàng, chỉ có thể ẩn",

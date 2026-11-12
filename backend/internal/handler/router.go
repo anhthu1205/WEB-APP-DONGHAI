@@ -65,6 +65,7 @@ func NewRouter(o Options) http.Handler {
 		// Ảnh: ngoài rate limit chung (K6)
 		api.Get("/images/{uuid}", h.getImage)
 		api.Get("/public/logo", h.getLogo)
+		api.Get("/public/category-covers/{id}", h.getCategoryCover)
 
 		api.Group(func(g chi.Router) {
 			g.Use(mw.RateLimit(o.Limits.General))
@@ -75,6 +76,8 @@ func NewRouter(o Options) http.Handler {
 				p.Get("/company", h.publicCompany)
 				p.Get("/products", h.publicProducts)
 				p.Get("/products/{slug}", h.publicProduct)
+				p.Get("/categories", h.publicCategories)
+				p.Get("/categories/{slug}", h.publicCategoryPage)
 				p.With(mw.RateLimit(o.Limits.Lookup)).Post("/warranty/lookup", h.warrantyLookup)
 			})
 
@@ -92,6 +95,7 @@ func NewRouter(o Options) http.Handler {
 				in.Get("/dashboard", h.dashboard)
 				in.Get("/products", h.internalProducts)
 				in.Get("/products/{id}", h.internalProduct)
+				in.Get("/categories", h.internalCategories)
 				in.Get("/price-list", h.priceList)
 				in.Get("/promotions/{id}", h.getPromotion)
 				in.Get("/customers", h.listCustomers)
@@ -114,6 +118,11 @@ func NewRouter(o Options) http.Handler {
 				ad.Post("/products/{id}/images", h.uploadImage)
 				ad.Patch("/images/{uuid}", h.setMainImage)
 				ad.Delete("/images/{uuid}", h.deleteImage)
+				ad.Post("/categories", h.createCategory)
+				ad.Put("/categories/{id}", h.updateCategory)
+				ad.Delete("/categories/{id}", h.deleteCategory)
+				ad.Post("/categories/{id}/cover", h.uploadCategoryCover)
+				ad.Delete("/categories/{id}/cover", h.deleteCategoryCover)
 				ad.Put("/company", h.updateCompany)
 				ad.Post("/company/logo", h.uploadLogo)
 				ad.Delete("/company/logo", h.deleteLogo)

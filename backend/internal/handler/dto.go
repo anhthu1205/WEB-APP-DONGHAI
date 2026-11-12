@@ -202,6 +202,8 @@ type InternalProductDTO struct {
 	PriceInternal    *int64             `json:"price_internal"`
 	IsVisible        bool               `json:"is_visible"`
 	SortOrder        int                `json:"sort_order"`
+	CategoryID       *int64             `json:"category_id"`
+	CategoryName     *string            `json:"category_name"`
 	MainImageURL     *string            `json:"main_image_url"`
 	Images           []InternalImageDTO `json:"images,omitempty"`
 	CreatedAt        time.Time          `json:"created_at"`
@@ -211,8 +213,9 @@ type InternalProductDTO struct {
 func toInternalProduct(p *domain.Product, withImages bool) InternalProductDTO {
 	out := InternalProductDTO{ID: p.ID, Name: p.Name, Slug: p.Slug, SKU: p.SKU, ShortDescription: p.ShortDescription,
 		Description: p.Description, Specs: p.Specs, Unit: p.Unit, PricePublic: p.PricePublic, PriceInternal: p.PriceInternal,
-		IsVisible: p.IsVisible, SortOrder: p.SortOrder, MainImageURL: imageURLPtr(p.MainImageID),
-		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt}
+		IsVisible: p.IsVisible, SortOrder: p.SortOrder, CategoryID: p.CategoryID, CategoryName: p.CategoryName,
+		MainImageURL: imageURLPtr(p.MainImageID),
+		CreatedAt:    p.CreatedAt, UpdatedAt: p.UpdatedAt}
 	if out.Specs == nil {
 		out.Specs = []domain.Spec{}
 	}

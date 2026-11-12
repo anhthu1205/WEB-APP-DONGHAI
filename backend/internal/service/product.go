@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"donghai/internal/domain"
+	"donghai/internal/repository"
 	"donghai/internal/slug"
 )
 
@@ -26,6 +27,7 @@ type ProductRequest struct {
 	PriceInternal    *int64        `json:"price_internal"`
 	IsVisible        *bool         `json:"is_visible"`
 	SortOrder        int           `json:"sort_order"`
+	CategoryID       *int64        `json:"category_id"` // null = sản phẩm chính (trang chủ)
 }
 
 // VisibilityRequest là body PATCH /api/admin/products/{id}/visibility.
@@ -33,9 +35,9 @@ type VisibilityRequest struct {
 	IsVisible *bool `json:"is_visible"`
 }
 
-// ListPublicProducts: SP đang hiển thị.
+// ListPublicProducts: SP hiện ở trang chủ (SP chính + SP của danh mục bật "hiện ở trang chủ").
 func (s *Service) ListPublicProducts(ctx context.Context, q string) ([]*domain.Product, error) {
-	return s.store.ListProducts(ctx, strings.TrimSpace(q), true)
+	return s.store.ListProducts(ctx, repository.ProductFilter{Q: strings.TrimSpace(q), OnlyVisible: true, Scope: repository.ScopeHome})
 }
 
 // GetPublicProduct: chi tiết SP đang hiển thị theo slug (ẩn → 404).
@@ -50,9 +52,24 @@ func (s *Service) GetPublicProduct(ctx context.Context, slugStr string) (*domain
 	return p, nil
 }
 
-// ListInternalProducts: tất cả SP (kể cả ẩn).
+// ListInternalProducts: tất cả SP (kể cả ẩn, mọi danh mục).
 func (s *Service) ListInternalProducts(ctx context.Context, q string) ([]*domain.Product, error) {
-	return s.store.ListProducts(ctx, strings.TrimSpace(q), false)
+	return s.store.ListProducts(ctx, repository.ProductFilter{Q: strings.TrimSpace(q)})
+}
+
+// checkCategory: category_id (nếu có) phải tồn tại.
+func (s *Service) checkCategory(ctx context.Context, id *int64) error {
+	if id == nil {
+		return nil
+	}
+	ok, err := s.store.CategoryExists(ctx, *id)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return &domain.ValidationError{Fields: map[string]string{"category_id": "Danh mục không tồn tại"}}
+	}
+	return nil
 }
 
 // GetInternalProduct: chi tiết SP kèm ảnh.
@@ -78,6 +95,7 @@ func (s *Service) buildProduct(in ProductRequest) (*domain.Product, bool, error)
 		PriceInternal:    in.PriceInternal,
 		IsVisible:        in.IsVisible == nil || *in.IsVisible,
 		SortOrder:        in.SortOrder,
+		CategoryID:       in.CategoryID,
 	}
 	if p.Unit == "" {
 		p.Unit = "cái"
@@ -141,6 +159,9 @@ func (s *Service) CreateProduct(ctx context.Context, in ProductRequest) (*domain
 	if err != nil {
 		return nil, err
 	}
+	if err := s.checkCategory(ctx, p.CategoryID); err != nil {
+		return nil, err
+	}
 	if !explicit {
 		if p.Slug, err = s.uniqueSlug(ctx, p.Name, 0); err != nil {
 			return nil, err
@@ -166,6 +187,9 @@ func (s *Service) UpdateProduct(ctx context.Context, id int64, in ProductRequest
 	p.ID = id
 	if !explicit {
 		p.Slug = old.Slug
+	}
+	if err := s.checkCategory(ctx, p.CategoryID); err != nil {
+		return nil, err
 	}
 	if err := s.store.UpdateProduct(ctx, p); err != nil {
 		return nil, notFound(err, "Không tìm thấy sản phẩm")

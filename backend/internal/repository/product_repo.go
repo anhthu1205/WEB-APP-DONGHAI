@@ -13,14 +13,22 @@ import (
 // Không bao giờ SELECT cột data của product_images ở đây.
 const productCols = `p.id, p.name, p.slug, p.sku, p.short_description, p.description, p.specs, p.unit,
 	p.price_public, p.price_internal, p.is_visible, p.sort_order, p.created_at, p.updated_at,
+	p.category_id, pc.name, pc.slug,
 	(SELECT i.id::text FROM product_images i WHERE i.product_id = p.id
 	   ORDER BY i.is_main DESC, i.sort_order, i.created_at LIMIT 1) AS main_image_id`
+
+// productFrom: luôn JOIN danh mục để lấy tên/slug và xét danh mục ẩn.
+const productFrom = ` FROM products p LEFT JOIN categories pc ON pc.id = p.category_id `
+
+// publicVisible: SP hiển thị với khách = SP bật hiển thị và (không thuộc danh mục hoặc danh mục đang hiển thị).
+const publicVisible = `(p.is_visible AND (p.category_id IS NULL OR pc.is_visible))`
 
 func scanProduct(r pgx.Row) (*domain.Product, error) {
 	var p domain.Product
 	var specs []byte
 	err := r.Scan(&p.ID, &p.Name, &p.Slug, &p.SKU, &p.ShortDescription, &p.Description, &specs, &p.Unit,
-		&p.PricePublic, &p.PriceInternal, &p.IsVisible, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt, &p.MainImageID)
+		&p.PricePublic, &p.PriceInternal, &p.IsVisible, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
+		&p.CategoryID, &p.CategoryName, &p.CategorySlug, &p.MainImageID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -33,12 +41,33 @@ func scanProduct(r pgx.Row) (*domain.Product, error) {
 	return &p, nil
 }
 
-// ListProducts liệt kê SP theo sort_order, id; onlyVisible cho trang công khai; q lọc theo tên/SKU.
-func (s *Store) ListProducts(ctx context.Context, q string, onlyVisible bool) ([]*domain.Product, error) {
-	sql := `SELECT ` + productCols + ` FROM products p WHERE ($1 = false OR p.is_visible)
+// Phạm vi danh mục khi liệt kê SP.
+const (
+	ScopeAll      = "all"      // mọi SP
+	ScopeHome     = "home"     // trang chủ: SP chính + SP của danh mục bật show_on_home
+	ScopeCategory = "category" // SP thuộc CategoryID
+)
+
+// ProductFilter lọc danh sách SP.
+type ProductFilter struct {
+	Q           string
+	OnlyVisible bool // chỉ SP khách thấy được (publicVisible)
+	Scope       string
+	CategoryID  int64 // dùng với ScopeCategory
+}
+
+// ListProducts liệt kê SP theo sort_order, id; q lọc theo tên/SKU.
+func (s *Store) ListProducts(ctx context.Context, f ProductFilter) ([]*domain.Product, error) {
+	sql := `SELECT ` + productCols + productFrom + ` WHERE ($1 = false OR ` + publicVisible + `)
 		AND ($2 = '' OR p.name ILIKE $3 OR p.sku ILIKE $3 OR p.slug ILIKE $3)
+		AND ($4 <> 'home' OR p.category_id IS NULL OR pc.show_on_home)
+		AND ($4 <> 'category' OR p.category_id = $5)
 		ORDER BY p.sort_order, p.id`
-	rows, err := s.q.Query(ctx, sql, onlyVisible, q, likePattern(q))
+	scope := f.Scope
+	if scope == "" {
+		scope = ScopeAll
+	}
+	rows, err := s.q.Query(ctx, sql, f.OnlyVisible, f.Q, likePattern(f.Q), scope, f.CategoryID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -47,17 +76,17 @@ func (s *Store) ListProducts(ctx context.Context, q string, onlyVisible bool) ([
 
 // GetProductByID lấy SP theo id (kể cả ẩn).
 func (s *Store) GetProductByID(ctx context.Context, id int64) (*domain.Product, error) {
-	return scanProduct(s.q.QueryRow(ctx, `SELECT `+productCols+` FROM products p WHERE p.id = $1`, id))
+	return scanProduct(s.q.QueryRow(ctx, `SELECT `+productCols+productFrom+` WHERE p.id = $1`, id))
 }
 
 // GetVisibleProductBySlug lấy SP đang hiển thị theo slug.
 func (s *Store) GetVisibleProductBySlug(ctx context.Context, slug string) (*domain.Product, error) {
-	return scanProduct(s.q.QueryRow(ctx, `SELECT `+productCols+` FROM products p WHERE p.slug = $1 AND p.is_visible`, slug))
+	return scanProduct(s.q.QueryRow(ctx, `SELECT `+productCols+productFrom+` WHERE p.slug = $1 AND `+publicVisible, slug))
 }
 
 // GetProductsByIDs trả map id → SP (dùng khi tạo đơn/KM).
 func (s *Store) GetProductsByIDs(ctx context.Context, ids []int64) (map[int64]*domain.Product, error) {
-	rows, err := s.q.Query(ctx, `SELECT `+productCols+` FROM products p WHERE p.id = ANY($1)`, ids)
+	rows, err := s.q.Query(ctx, `SELECT `+productCols+productFrom+` WHERE p.id = ANY($1)`, ids)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -91,10 +120,10 @@ func specsJSON(sp []domain.Spec) []byte {
 func (s *Store) InsertProduct(ctx context.Context, p *domain.Product) (int64, error) {
 	var id int64
 	err := s.q.QueryRow(ctx, `INSERT INTO products (name, slug, sku, short_description, description, specs, unit,
-		price_public, price_internal, is_visible, sort_order)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+		price_public, price_internal, is_visible, sort_order, category_id)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
 		p.Name, p.Slug, p.SKU, p.ShortDescription, p.Description, specsJSON(p.Specs), p.Unit,
-		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder).Scan(&id)
+		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID).Scan(&id)
 	return id, mapErr(err)
 }
 
@@ -102,9 +131,9 @@ func (s *Store) InsertProduct(ctx context.Context, p *domain.Product) (int64, er
 func (s *Store) UpdateProduct(ctx context.Context, p *domain.Product) error {
 	tag, err := s.q.Exec(ctx, `UPDATE products SET name = $2, slug = $3, sku = $4, short_description = $5,
 		description = $6, specs = $7, unit = $8, price_public = $9, price_internal = $10, is_visible = $11,
-		sort_order = $12 WHERE id = $1`,
+		sort_order = $12, category_id = $13 WHERE id = $1`,
 		p.ID, p.Name, p.Slug, p.SKU, p.ShortDescription, p.Description, specsJSON(p.Specs), p.Unit,
-		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder)
+		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID)
 	if err != nil {
 		return mapErr(err)
 	}

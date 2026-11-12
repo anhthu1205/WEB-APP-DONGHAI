@@ -59,7 +59,7 @@ onMounted(load)
       <StateBlock v-else-if="!filtered.length" :title="list.length ? 'Không có sản phẩm khớp tìm kiếm' : 'Chưa có sản phẩm'" />
       <div v-else class="table-wrap">
         <table class="table responsive">
-          <thead><tr><th>Sản phẩm</th><th class="right">Giá niêm yết</th><th class="right">Giá nội bộ</th><th>Trạng thái</th><th v-if="auth.isAdmin" class="right">Thao tác</th></tr></thead>
+          <thead><tr><th>Sản phẩm</th><th>Danh mục</th><th class="right">Giá niêm yết</th><th class="right">Giá nội bộ</th><th>Trạng thái</th><th v-if="auth.isAdmin" class="right">Thao tác</th></tr></thead>
           <tbody>
             <tr v-for="p in filtered" :key="p.id">
               <td data-label="Sản phẩm">
@@ -68,6 +68,7 @@ onMounted(load)
                   <span><strong>{{ p.name }}</strong><br /><span class="muted small">{{ p.sku || p.slug }}</span></span>
                 </div>
               </td>
+              <td data-label="Danh mục"><span class="badge" :class="p.category_name ? 'badge-blue' : 'badge-muted'">{{ p.category_name || 'Trang chủ' }}</span></td>
               <td data-label="Giá niêm yết" class="right num">{{ formatVND(p.price_public) }}</td>
               <td data-label="Giá nội bộ" class="right num"><strong>{{ formatVND(p.price_internal) }}</strong></td>
               <td data-label="Trạng thái"><span class="badge" :class="p.is_visible ? 'badge-ok' : 'badge-muted'"><span class="dot" />{{ p.is_visible ? 'Đang hiển thị' : 'Đang ẩn' }}</span></td>

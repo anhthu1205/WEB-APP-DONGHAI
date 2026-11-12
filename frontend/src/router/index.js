@@ -20,6 +20,7 @@ const v = {
   promotions: () => import('../views/internal/admin/PromotionsAdminView.vue'),
   promotionEdit: () => import('../views/internal/admin/PromotionEditView.vue'),
   company: () => import('../views/internal/admin/CompanyEditView.vue'),
+  categories: () => import('../views/internal/admin/CategoriesView.vue'),
   users: () => import('../views/internal/admin/UsersView.vue'),
 }
 const admin = { requiresAuth: true, role: 'admin' }
@@ -30,6 +31,7 @@ const routes = [
     component: PublicLayout,
     children: [
       { path: '', name: 'home', component: HomeView, meta: { title: 'Đèn đánh cá, đèn công trình chính hãng' } },
+      { path: 'danh-muc/:slug', name: 'category', component: () => import('../views/public/CategoryView.vue'), meta: { title: 'Danh mục sản phẩm' } },
       { path: 'bao-hanh', name: 'warranty', component: () => import('../views/public/WarrantyView.vue'), meta: { title: 'Tra cứu bảo hành' } },
     ],
   },
@@ -53,6 +55,7 @@ const routes = [
       { path: 'khuyen-mai', name: 'promotions', component: v.promotions, meta: { ...admin, title: 'Quản lý khuyến mãi' } },
       { path: 'khuyen-mai/moi', name: 'promotion-new', component: v.promotionEdit, meta: { ...admin, title: 'Thêm khuyến mãi' } },
       { path: 'khuyen-mai/:id(\\d+)', name: 'promotion-edit', component: v.promotionEdit, meta: { ...admin, title: 'Sửa khuyến mãi' } },
+      { path: 'danh-muc', name: 'categories', component: v.categories, meta: { ...admin, title: 'Danh mục sản phẩm' } },
       { path: 'cong-ty', name: 'company', component: v.company, meta: { ...admin, title: 'Thông tin công ty' } },
       { path: 'tai-khoan', name: 'users', component: v.users, meta: { ...admin, title: 'Tài khoản' } },
       { path: 'doi-mat-khau', name: 'change-password', component: v.changePassword, meta: { title: 'Đổi mật khẩu' } },

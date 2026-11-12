@@ -2,6 +2,7 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { productsApi } from '../../../api/products'
+import { categoriesApi } from '../../../api/categories'
 import { useToastStore } from '../../../stores/toast'
 import AppIcon from '../../../components/AppIcon.vue'
 import StateBlock from '../../../components/StateBlock.vue'
@@ -14,7 +15,8 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToastStore()
 const id = computed(() => (route.params.id ? Number(route.params.id) : null))
-const f = reactive({ name: '', slug: '', sku: '', short_description: '', description: '', specs: [], unit: 'cái', price_public: null, price_internal: null, is_visible: true, sort_order: 0 })
+const f = reactive({ name: '', slug: '', sku: '', short_description: '', description: '', specs: [], unit: 'cái', price_public: null, price_internal: null, is_visible: true, sort_order: 0, category_id: null })
+const categories = ref([])
 const images = ref([])
 const loading = ref(!!id.value)
 const loadErr = ref(null)
@@ -42,14 +44,28 @@ async function load() {
     const p = await productsApi.get(id.value)
     Object.assign(f, { name: p.name, slug: p.slug, sku: p.sku || '', short_description: p.short_description, description: p.description,
       specs: p.specs.map((s) => ({ ...s })), unit: p.unit, price_public: p.price_public, price_internal: p.price_internal,
-      is_visible: p.is_visible, sort_order: p.sort_order })
+      is_visible: p.is_visible, sort_order: p.sort_order, category_id: p.category_id ?? null })
     images.value = p.images || []
   } catch (e) { loadErr.value = e } finally { loading.value = false }
 }
+async function loadCategories() {
+  try { categories.value = await categoriesApi.list() } catch { /* không chặn form: chỉ thiếu danh sách danh mục */ }
+}
+const currentCat = computed(() => categories.value.find((c) => c.id === f.category_id) || null)
+// Nơi SP xuất hiện với khách, để admin hiểu tác dụng của ô Danh mục
+const placeText = computed(() => {
+  const c = currentCat.value
+  if (!c) return 'Sản phẩm chính: hiện ở trang chủ.'
+  let t = `Hiện ở trang “${c.name}” (/danh-muc/${c.slug})`
+  if (c.show_on_home) t += ' và trang chủ'
+  t += '.'
+  if (!c.is_visible) t += ' Danh mục này đang ẩn nên khách chưa thấy.'
+  return t
+})
 async function reloadImages() {
   try { images.value = (await productsApi.get(id.value)).images || [] } catch { /* bỏ qua */ }
 }
-onMounted(load)
+onMounted(() => { load(); loadCategories() })
 // Cùng component được dùng lại khi chuyển sang SP khác (vd. sau khi sao chép) → tải lại
 watch(id, (n, o) => { if (n && o && n !== o) load() })
 
@@ -63,6 +79,7 @@ async function save() {
     specs: f.specs.filter((s) => s.label.trim() || s.value.trim()).map((s) => ({ label: s.label, value: s.value })),
     unit: f.unit, price_public: f.price_public ?? 0, price_internal: f.price_internal,
     is_visible: f.is_visible, sort_order: Number(f.sort_order) || 0,
+    category_id: f.category_id || null,
   }
   try {
     if (id.value) {
@@ -91,7 +108,7 @@ async function remove() {
   <div>
     <RouterLink to="/noi-bo/san-pham" class="back small"><AppIcon name="left" :size="16" /> Danh sách sản phẩm</RouterLink>
     <div class="page-head">
-      <div><h1>{{ id ? 'Sửa sản phẩm' : 'Thêm sản phẩm' }}</h1><p v-if="id && f.is_visible"><a :href="'/?sp=' + f.slug" target="_blank" rel="noopener">Xem trên trang chủ</a></p></div>
+      <div><h1>{{ id ? 'Sửa sản phẩm' : 'Thêm sản phẩm' }}</h1><p v-if="id && f.is_visible"><a :href="(currentCat ? '/danh-muc/' + currentCat.slug : '/') + '?sp=' + f.slug" target="_blank" rel="noopener">Xem như khách</a></p></div>
       <div v-if="id" class="row">
         <button class="btn btn-ghost" :disabled="copying" @click="duplicate"><span v-if="copying" class="spinner" /><AppIcon v-else name="copy" :size="16" /> Sao chép</button>
         <button class="btn btn-ghost" style="color:var(--danger-600)" @click="deleting = true"><AppIcon name="trash" :size="16" /> Xóa sản phẩm</button>
@@ -106,12 +123,21 @@ async function remove() {
         <div class="field"><label for="pk">Mã SKU</label><input id="pk" v-model="f.sku" class="input" maxlength="50" :class="{ invalid: errs.sku }" /><span v-if="errs.sku" class="err">{{ errs.sku }}</span></div>
         <div class="field"><label for="pp">Giá niêm yết (công khai)</label><MoneyInput id="pp" v-model="f.price_public" :invalid="!!errs.price_public" /><span v-if="errs.price_public" class="err">{{ errs.price_public }}</span></div>
         <div class="field"><label for="pi">Giá nội bộ</label><MoneyInput id="pi" v-model="f.price_internal" placeholder="Chưa đặt" :invalid="!!errs.price_internal" /><span class="hint">Chỉ nhân viên đã đăng nhập thấy giá này.</span></div>
+        <div class="field span-2">
+          <label for="pc">Danh mục</label>
+          <select id="pc" v-model="f.category_id" class="select" :class="{ invalid: errs.category_id }">
+            <option :value="null">Sản phẩm chính (trang chủ)</option>
+            <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}{{ c.is_visible ? '' : ' (đang ẩn)' }}</option>
+          </select>
+          <span v-if="errs.category_id" class="err">{{ errs.category_id }}</span>
+          <span v-else class="hint">{{ placeText }} <RouterLink to="/noi-bo/danh-muc">Quản lý danh mục</RouterLink></span>
+        </div>
         <div class="field"><label for="pu">Đơn vị</label><input id="pu" v-model="f.unit" class="input" maxlength="20" /></div>
         <div class="field"><label for="po">Thứ tự hiển thị</label><input id="po" v-model.number="f.sort_order" class="input num" type="number" /><span class="hint">Số nhỏ hiển thị trước.</span></div>
         <div class="field span-2"><label for="psd">Mô tả ngắn</label><textarea id="psd" v-model="f.short_description" class="textarea" style="min-height:70px" maxlength="500" /></div>
         <div class="field span-2"><label for="pd">Mô tả chi tiết</label><textarea id="pd" v-model="f.description" class="textarea" style="min-height:160px" maxlength="20000" /><span class="hint">Xuống dòng được giữ nguyên khi hiển thị.</span></div>
         <div class="field span-2"><span class="label">Thông số kỹ thuật</span><SpecsEditor v-model="f.specs" /></div>
-        <label class="check span-2"><input v-model="f.is_visible" type="checkbox" /> Hiển thị trên trang chủ</label>
+        <label class="check span-2"><input v-model="f.is_visible" type="checkbox" /> Hiển thị cho khách</label>
         <div v-if="msg" class="alert alert-error span-2" role="alert">{{ msg }}</div>
         <div class="span-2 row"><button class="btn btn-primary" type="submit" :disabled="saving"><span v-if="saving" class="spinner" />{{ id ? 'Lưu thay đổi' : 'Thêm sản phẩm' }}</button></div>
       </form>
