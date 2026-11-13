@@ -28,6 +28,7 @@ type ProductRequest struct {
 	IsVisible        *bool         `json:"is_visible"`
 	SortOrder        int           `json:"sort_order"`
 	CategoryID       *int64        `json:"category_id"` // null = sản phẩm chính (trang chủ)
+	Badge            string        `json:"badge"`       // nhãn góc thẻ, rỗng = không hiện
 }
 
 // VisibilityRequest là body PATCH /api/admin/products/{id}/visibility.
@@ -96,6 +97,7 @@ func (s *Service) buildProduct(in ProductRequest) (*domain.Product, bool, error)
 		IsVisible:        in.IsVisible == nil || *in.IsVisible,
 		SortOrder:        in.SortOrder,
 		CategoryID:       in.CategoryID,
+		Badge:            strings.Join(strings.Fields(in.Badge), " "),
 	}
 	if p.Unit == "" {
 		p.Unit = "cái"
@@ -105,6 +107,7 @@ func (s *Service) buildProduct(in ProductRequest) (*domain.Product, bool, error)
 	v.Check(runeLen(p.ShortDescription) <= 500, "short_description", "Mô tả ngắn tối đa 500 ký tự")
 	v.Check(runeLen(p.Description) <= 20000, "description", "Mô tả chi tiết tối đa 20000 ký tự")
 	v.Check(runeLen(p.Unit) <= 20, "unit", "Đơn vị tối đa 20 ký tự")
+	v.Check(runeLen(p.Badge) <= 40, "badge", "Nhãn tối đa 40 ký tự")
 	v.Check(p.PricePublic >= 0 && p.PricePublic <= MaxPrice, "price_public", "Giá niêm yết không hợp lệ")
 	v.Check(p.PriceInternal == nil || (*p.PriceInternal >= 0 && *p.PriceInternal <= MaxPrice), "price_internal", "Giá nội bộ không hợp lệ")
 	v.Check(p.SortOrder >= -100000 && p.SortOrder <= 100000, "sort_order", "Thứ tự không hợp lệ")

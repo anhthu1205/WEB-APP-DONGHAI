@@ -14,12 +14,12 @@ const year = new Date().getFullYear()
   <footer id="lien-he" class="ftr">
     <svg class="wave" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true"><path d="M0 30c120-20 240-20 360 0s240 20 360 0 240-20 360 0 240 20 360 0v30H0z" /></svg>
     <div class="container grid">
-      <section class="about">
+      <section v-reveal class="about">
         <div class="brand"><img :src="company.logoUrl" alt="" height="40" class="logo" /><h2>{{ c?.name || 'Công ty Đông Hải' }}</h2></div>
         <p v-if="c?.slogan" class="slogan">{{ c.slogan }}</p>
         <p v-if="c?.about" class="txt">{{ c.about }}</p>
       </section>
-      <section>
+      <section v-reveal="1">
         <h3>Thông tin liên hệ</h3>
         <ul class="info">
           <li v-if="c?.address"><AppIcon name="map" :size="18" /><span>{{ c.address }}</span></li>
@@ -28,7 +28,7 @@ const year = new Date().getFullYear()
           <li v-if="c?.working_hours"><AppIcon name="clock" :size="18" /><span>{{ c.working_hours }}</span></li>
         </ul>
       </section>
-      <section>
+      <section v-reveal="2">
         <h3>Kết nối với chúng tôi</h3>
         <SocialButtons :socials="c?.socials" />
       </section>

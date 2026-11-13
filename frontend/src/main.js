@@ -10,10 +10,12 @@ import App from './App.vue'
 import router from './router'
 import { setUnauthorizedHandler } from './api/http'
 import { useAuthStore } from './stores/auth'
+import { reveal } from './directives/reveal'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+app.directive('reveal', reveal)
 
 // 401 bất kỳ lúc nào (token hết hạn / bị khóa) → xóa token, về trang đăng nhập
 setUnauthorizedHandler(() => {

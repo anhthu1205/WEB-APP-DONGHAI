@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useCompanyStore } from '../stores/company'
 import { useCategoriesStore } from '../stores/categories'
@@ -9,6 +9,11 @@ import AppIcon from './AppIcon.vue'
 const company = useCompanyStore()
 const route = useRoute()
 const open = ref(false)
+// Đổ bóng thanh đầu trang khi đã cuộn xuống
+const scrolled = ref(false)
+function onScroll() { scrolled.value = window.scrollY > 8 }
+onMounted(() => { onScroll(); window.addEventListener('scroll', onScroll, { passive: true }) })
+onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 const phone = computed(() => company.data?.phone || '')
 const categories = useCategoriesStore()
 categories.load()
@@ -22,7 +27,7 @@ const links = computed(() => [
 </script>
 
 <template>
-  <header class="hdr">
+  <header class="hdr" :class="{ scrolled }">
     <div class="container bar">
       <RouterLink to="/" class="brand" aria-label="Đông Hải — trang chủ" @click="open = false">
         <img :src="company.logoUrl" alt="" height="36" class="logo" />
@@ -45,7 +50,21 @@ const links = computed(() => [
 </template>
 
 <style scoped>
-.hdr { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.94); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); }
+.hdr { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,.94); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--line); transition: box-shadow .3s, background-color .3s; }
+.hdr.scrolled { background: rgba(255,255,255,.86); box-shadow: 0 8px 24px -16px rgba(7,42,99,.45); }
+.brand .logo { transition: transform .4s cubic-bezier(.3,1.6,.5,1); }
+.brand:hover .logo { transform: rotate(-8deg) scale(1.08); }
+/* Gạch chân trượt ra khi rê chuột */
+.nav-link { position: relative; }
+.nav-link::after { content: ''; position: absolute; left: 14px; right: 14px; bottom: 4px; height: 2px; border-radius: 2px; background: var(--amber-500); transform: scaleX(0); transform-origin: left; transition: transform .25s ease; }
+.nav-link:hover::after { transform: scaleX(1); }
+/* Biểu tượng gọi có sóng lan */
+.call-ico { position: relative; }
+.call-ico::before, .call-ico::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid var(--amber-500); animation: ring 2.6s ease-out infinite; }
+.call-ico::after { animation-delay: 1.3s; }
+@keyframes ring { from { transform: scale(1); opacity: .7; } to { transform: scale(1.7); opacity: 0; } }
+.call:hover .call-ico :deep(svg) { animation: wiggle .5s ease; }
+@keyframes wiggle { 25% { transform: rotate(-14deg); } 75% { transform: rotate(14deg); } }
 .bar { display: flex; align-items: center; gap: 24px; height: 64px; }
 .brand { display: flex; align-items: center; gap: 10px; text-decoration: none !important; }
 .brand .name { font-weight: 800; font-size: 20px; color: var(--sea-800); letter-spacing: -.02em; }

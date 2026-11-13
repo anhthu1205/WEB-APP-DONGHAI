@@ -13,7 +13,7 @@ import (
 // Không bao giờ SELECT cột data của product_images ở đây.
 const productCols = `p.id, p.name, p.slug, p.sku, p.short_description, p.description, p.specs, p.unit,
 	p.price_public, p.price_internal, p.is_visible, p.sort_order, p.created_at, p.updated_at,
-	p.category_id, pc.name, pc.slug,
+	p.category_id, pc.name, pc.slug, p.badge,
 	(SELECT i.id::text FROM product_images i WHERE i.product_id = p.id
 	   ORDER BY i.is_main DESC, i.sort_order, i.created_at LIMIT 1) AS main_image_id`
 
@@ -28,7 +28,7 @@ func scanProduct(r pgx.Row) (*domain.Product, error) {
 	var specs []byte
 	err := r.Scan(&p.ID, &p.Name, &p.Slug, &p.SKU, &p.ShortDescription, &p.Description, &specs, &p.Unit,
 		&p.PricePublic, &p.PriceInternal, &p.IsVisible, &p.SortOrder, &p.CreatedAt, &p.UpdatedAt,
-		&p.CategoryID, &p.CategoryName, &p.CategorySlug, &p.MainImageID)
+		&p.CategoryID, &p.CategoryName, &p.CategorySlug, &p.Badge, &p.MainImageID)
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -120,10 +120,10 @@ func specsJSON(sp []domain.Spec) []byte {
 func (s *Store) InsertProduct(ctx context.Context, p *domain.Product) (int64, error) {
 	var id int64
 	err := s.q.QueryRow(ctx, `INSERT INTO products (name, slug, sku, short_description, description, specs, unit,
-		price_public, price_internal, is_visible, sort_order, category_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
+		price_public, price_internal, is_visible, sort_order, category_id, badge)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
 		p.Name, p.Slug, p.SKU, p.ShortDescription, p.Description, specsJSON(p.Specs), p.Unit,
-		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID).Scan(&id)
+		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID, p.Badge).Scan(&id)
 	return id, mapErr(err)
 }
 
@@ -131,9 +131,9 @@ func (s *Store) InsertProduct(ctx context.Context, p *domain.Product) (int64, er
 func (s *Store) UpdateProduct(ctx context.Context, p *domain.Product) error {
 	tag, err := s.q.Exec(ctx, `UPDATE products SET name = $2, slug = $3, sku = $4, short_description = $5,
 		description = $6, specs = $7, unit = $8, price_public = $9, price_internal = $10, is_visible = $11,
-		sort_order = $12, category_id = $13 WHERE id = $1`,
+		sort_order = $12, category_id = $13, badge = $14 WHERE id = $1`,
 		p.ID, p.Name, p.Slug, p.SKU, p.ShortDescription, p.Description, specsJSON(p.Specs), p.Unit,
-		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID)
+		p.PricePublic, p.PriceInternal, p.IsVisible, p.SortOrder, p.CategoryID, p.Badge)
 	if err != nil {
 		return mapErr(err)
 	}

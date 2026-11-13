@@ -8,6 +8,7 @@ import AppIcon from '../../components/AppIcon.vue'
 import ProductCard from '../../components/ProductCard.vue'
 import ProductModal from '../../components/ProductModal.vue'
 import PhoneInput from '../../components/PhoneInput.vue'
+import HeroLights from '../../components/HeroLights.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -63,23 +64,24 @@ function quickLookup() {
 
 <template>
   <section class="hero">
+    <HeroLights />
     <div class="container hero-in">
       <div class="copy">
-        <p class="kicker">{{ c?.name || 'Đông Hải Lighting' }}</p>
-        <h1>{{ c?.slogan || 'Đèn đánh cá, đèn công trình, dự án chính hãng' }}</h1>
-        <p class="sub">Bảo hành 2 - 5 năm, 1 đổi 1 trong 6 tháng - giá niêm yết, Miễn phí vận chuyển.</p>
-        <div class="ctas">
-          <a href="#san-pham" class="btn btn-accent">Xem sản phẩm</a>
+        <p class="kicker enter">{{ c?.name || 'Đông Hải Lighting' }}</p>
+        <h1 class="enter" style="--d:80ms">{{ c?.slogan || 'Đèn đánh cá, đèn công trình, dự án chính hãng' }}</h1>
+        <p class="sub enter" style="--d:180ms">Bảo hành 2 - 5 năm, 1 đổi 1 trong 6 tháng - giá niêm yết, Miễn phí vận chuyển.</p>
+        <div class="ctas enter" style="--d:280ms">
+          <a href="#san-pham" class="btn btn-accent btn-shine">Xem sản phẩm</a>
           <RouterLink to="/bao-hanh" class="btn btn-light"><AppIcon name="shield" /> Tra cứu bảo hành</RouterLink>
         </div>
-        <ul class="promises">
+        <ul class="promises enter" style="--d:380ms">
           <li><AppIcon name="badge" :size="18" /> Hàng chính hãng</li>
           <li><AppIcon name="shield" :size="18" /> Bảo hành 2 - 5 năm</li>
           <li><AppIcon name="truck" :size="18" /> Miễn phí vận chuyển</li>
         </ul>
       </div>
 
-      <form class="ticket" aria-labelledby="ticket-title" @submit.prevent="quickLookup">
+       <form class="ticket enter" style="--d:300ms" aria-labelledby="ticket-title" @submit.prevent="quickLookup">
         <div class="stamp" aria-hidden="true"><strong>2</strong><span>năm</span></div>
         <h2 id="ticket-title">Phiếu bảo hành điện tử</h2>
         <p>Nhập số điện thoại bạn đã dùng khi mua hàng để xem hạn bảo hành của từng đơn.</p>
@@ -98,7 +100,7 @@ function quickLookup() {
   </section>
 
   <section id="san-pham" class="container products">
-    <div class="sec-head">
+    <div v-reveal class="sec-head">
       <div>
         <h2>Sản phẩm đang bán</h2>
         <p v-if="!loading && !error" class="muted">{{ products.length }} sản phẩm, giá niêm yết tại cửa hàng</p>
@@ -134,7 +136,7 @@ function quickLookup() {
         <button class="btn btn-ghost btn-sm" @click="q = ''">Xem tất cả sản phẩm</button>
       </div>
       <div v-else class="grid">
-        <ProductCard v-for="p in filtered" :key="p.id" :product="p" @open="open" />
+        <ProductCard v-for="(p, i) in filtered" :key="p.id" v-reveal="i" :product="p" @open="open" />
       </div>
     </template>
   </section>
@@ -158,6 +160,15 @@ h1 { color: #fff; font-size: clamp(30px, 4.6vw, 50px); font-weight: 800; line-he
 .promises li { display: flex; align-items: center; gap: 8px; }
 .promises svg { color: var(--amber-500); }
 
+.ticket { animation-name: enter-up, float; animation-duration: .7s, 6s; animation-timing-function: cubic-bezier(.2,.7,.2,1), ease-in-out; animation-delay: var(--d), 1.2s; animation-iteration-count: 1, infinite; animation-direction: normal, alternate; animation-fill-mode: both, none; }
+@keyframes float { from { transform: translateY(0); } to { transform: translateY(-8px); } }
+.stamp { transition: transform .3s cubic-bezier(.3,1.6,.5,1); }
+.ticket:hover .stamp { transform: rotate(4deg) scale(1.06); }
+.kicker { display: inline-flex; align-items: center; gap: 8px; }
+.kicker::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--amber-500); box-shadow: 0 0 0 0 rgba(245,158,11,.6); animation: blip 2.4s ease-out infinite; }
+@keyframes blip { 0% { box-shadow: 0 0 0 0 rgba(245,158,11,.6); } 80%, 100% { box-shadow: 0 0 0 10px rgba(245,158,11,0); } }
+h1 { background: linear-gradient(100deg, #fff 40%, #ffe7a3 50%, #fff 60%) 0 0 / 250% 100%; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; animation: enter-up .7s cubic-bezier(.2,.7,.2,1) both, glint 7s ease-in-out 1.5s infinite; animation-delay: var(--d, 0ms), 1.5s; }
+@keyframes glint { 0%, 70% { background-position: 100% 0; } 100% { background-position: -50% 0; } }
 .ticket { position: relative; background: #fff; color: var(--ink-900); border-radius: var(--r-xl); padding: 28px 24px 22px; box-shadow: var(--shadow-3); display: flex; flex-direction: column; gap: 12px; max-width: 440px; width: 100%; justify-self: end; }
 @media (max-width: 959px) { .ticket { justify-self: stretch; max-width: none; } }
 .ticket h2 { font-size: 20px; font-weight: 700; padding-right: 76px; }

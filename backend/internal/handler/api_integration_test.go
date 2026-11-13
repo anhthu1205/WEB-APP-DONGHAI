@@ -749,6 +749,38 @@ func TestAPI(t *testing.T) {
 		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/categories/%d", nc.ID), e.ta, nil), 204, "T-CAT12 xóa danh mục rỗng")
 	})
 
+	t.Run("T-BADGE nhãn góc thẻ", func(t *testing.T) {
+		prod := e.do("GET", "/api/internal/products/5", e.ta, nil).Map(t)
+		body := map[string]any{}
+		for _, k := range []string{"name", "sku", "short_description", "description", "specs", "unit", "price_public", "price_internal", "is_visible", "sort_order", "category_id"} {
+			body[k] = prod[k]
+		}
+		slug5 := prod["slug"].(string)
+		body["badge"] = strings.Repeat("x", 41)
+		e.expect(e.do("PUT", "/api/admin/products/5", e.ta, body), 400, "T-BADGE1 quá 40 ký tự")
+		body["badge"] = "  Mua 5   tặng 1 "
+		up := e.do("PUT", "/api/admin/products/5", e.ta, body)
+		e.expect(up, 200, "T-BADGE2 đặt nhãn")
+		if up.Map(t)["badge"] != "Mua 5 tặng 1" {
+			t.Errorf("T-BADGE2 nhãn phải được chuẩn hóa khoảng trắng: %s", up.Body)
+		}
+		if !strings.Contains(string(e.do("GET", "/api/public/products", "", nil).Body), `"badge":"Mua 5 tặng 1"`) {
+			t.Errorf("T-BADGE3 danh sách công khai thiếu nhãn")
+		}
+		if e.do("GET", "/api/public/products/"+slug5, "", nil).Map(t)["badge"] != "Mua 5 tặng 1" {
+			t.Errorf("T-BADGE3 chi tiết công khai thiếu nhãn")
+		}
+		dup := e.do("POST", "/api/admin/products/5/duplicate", e.ta, nil).Map(t)
+		if dup["badge"] != "Mua 5 tặng 1" {
+			t.Errorf("T-BADGE4 bản sao phải giữ nhãn: %v", dup["badge"])
+		}
+		e.expect(e.do("DELETE", fmt.Sprintf("/api/admin/products/%v", dup["id"]), e.ta, nil), 204, "dọn bản sao")
+		body["badge"] = ""
+		if r := e.do("PUT", "/api/admin/products/5", e.ta, body); r.Map(t)["badge"] != "" {
+			t.Errorf("T-BADGE5 xóa nhãn: %s", r.Body)
+		}
+	})
+
 	t.Run("T-AD1..AD3 sản phẩm admin", func(t *testing.T) {
 		body := map[string]any{"name": "Máy lọc nước RO Đông Hải DH-9", "short_description": "x", "description": "y",
 			"specs": []map[string]string{{"label": "A", "value": "B"}}, "unit": "cái", "price_public": 100, "price_internal": 90, "is_visible": true, "sort_order": 9}

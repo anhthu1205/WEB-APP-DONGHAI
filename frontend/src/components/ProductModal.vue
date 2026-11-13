@@ -76,6 +76,7 @@ onBeforeUnmount(() => {
           <ImageGallery v-else :images="product?.images || []" :alt="view?.name" :seed="view?.id || 0" />
         </div>
         <div class="right">
+          <span v-if="view?.badge" class="badge-tag">{{ view.badge }}</span>
           <h2 class="title">{{ view?.name }}</h2>
           <p v-if="view?.short_description" class="lead">{{ view.short_description }}</p>
           <div class="price-row">
@@ -124,6 +125,7 @@ onBeforeUnmount(() => {
 @media (min-width: 860px) { .grid { grid-template-columns: 1fr 1fr; gap: 36px; padding: 32px; } .left { position: sticky; top: 0; align-self: start; } }
 .title { font-size: 24px; font-weight: 700; padding-right: 48px; }
 .lead { margin-top: 8px; color: var(--ink-700); }
+.badge-tag { display: inline-block; margin-bottom: 8px; padding: 5px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ef4444, #f97316); }
 .price-row { margin-top: 16px; display: flex; align-items: baseline; gap: 6px; }
 .price-row .price { font-size: 30px; font-weight: 800; letter-spacing: -.01em; }
 .warranty { margin-top: 10px; display: flex; align-items: center; gap: 8px; color: var(--ok-700); font-weight: 600; font-size: 14px; }

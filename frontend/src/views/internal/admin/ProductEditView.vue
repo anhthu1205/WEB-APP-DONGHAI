@@ -15,7 +15,8 @@ const route = useRoute()
 const router = useRouter()
 const toast = useToastStore()
 const id = computed(() => (route.params.id ? Number(route.params.id) : null))
-const f = reactive({ name: '', slug: '', sku: '', short_description: '', description: '', specs: [], unit: 'cái', price_public: null, price_internal: null, is_visible: true, sort_order: 0, category_id: null })
+const f = reactive({ name: '', slug: '', sku: '', short_description: '', description: '', specs: [], unit: 'cái', price_public: null, price_internal: null, is_visible: true, sort_order: 0, category_id: null, badge: '' })
+const badgeIdeas = ['Mua 5 tặng 1', 'Mới', 'Bán chạy', 'Giảm giá', 'Chính hãng']
 const categories = ref([])
 const images = ref([])
 const loading = ref(!!id.value)
@@ -44,7 +45,7 @@ async function load() {
     const p = await productsApi.get(id.value)
     Object.assign(f, { name: p.name, slug: p.slug, sku: p.sku || '', short_description: p.short_description, description: p.description,
       specs: p.specs.map((s) => ({ ...s })), unit: p.unit, price_public: p.price_public, price_internal: p.price_internal,
-      is_visible: p.is_visible, sort_order: p.sort_order, category_id: p.category_id ?? null })
+      is_visible: p.is_visible, sort_order: p.sort_order, category_id: p.category_id ?? null, badge: p.badge || '' })
     images.value = p.images || []
   } catch (e) { loadErr.value = e } finally { loading.value = false }
 }
@@ -80,6 +81,7 @@ async function save() {
     unit: f.unit, price_public: f.price_public ?? 0, price_internal: f.price_internal,
     is_visible: f.is_visible, sort_order: Number(f.sort_order) || 0,
     category_id: f.category_id || null,
+    badge: f.badge.trim(),
   }
   try {
     if (id.value) {
@@ -132,6 +134,19 @@ async function remove() {
           <span v-if="errs.category_id" class="err">{{ errs.category_id }}</span>
           <span v-else class="hint">{{ placeText }} <RouterLink to="/noi-bo/danh-muc">Quản lý danh mục</RouterLink></span>
         </div>
+        <div class="field span-2">
+          <label for="pb">Nhãn góc thẻ</label>
+          <div class="badge-row">
+            <input id="pb" v-model="f.badge" class="input" maxlength="40" placeholder="Vd. Mua 5 tặng 1 — để trống nếu không cần" :class="{ invalid: errs.badge }" />
+            <span v-if="f.badge.trim()" class="badge-preview" aria-hidden="true">{{ f.badge.trim() }}</span>
+          </div>
+          <span v-if="errs.badge" class="err">{{ errs.badge }}</span>
+          <div class="ideas">
+            <span class="hint">Gợi ý:</span>
+            <button v-for="b in badgeIdeas" :key="b" type="button" class="chip" @click="f.badge = b">{{ b }}</button>
+            <button v-if="f.badge" type="button" class="chip ghost" @click="f.badge = ''">Bỏ nhãn</button>
+          </div>
+        </div>
         <div class="field"><label for="pu">Đơn vị</label><input id="pu" v-model="f.unit" class="input" maxlength="20" /></div>
         <div class="field"><label for="po">Thứ tự hiển thị</label><input id="po" v-model.number="f.sort_order" class="input num" type="number" /><span class="hint">Số nhỏ hiển thị trước.</span></div>
         <div class="field span-2"><label for="psd">Mô tả ngắn</label><textarea id="psd" v-model="f.short_description" class="textarea" style="min-height:70px" maxlength="500" /></div>
@@ -157,4 +172,11 @@ async function remove() {
 @media (min-width: 1200px) { .cols { grid-template-columns: 1.4fr 1fr; align-items: start; } }
 .h { font-size: 17px; margin-bottom: 14px; }
 .err { color: var(--danger-600); font-size: 13px; }
+.badge-row { display: flex; gap: 10px; align-items: center; }
+.badge-row .input { flex: 1; }
+.badge-preview { flex-shrink: 0; max-width: 45%; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: linear-gradient(135deg, #ef4444, #f97316); }
+.ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }
+.chip { border: 1px solid var(--line-strong); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--ink-700); }
+.chip:hover { border-color: var(--sea-600); color: var(--sea-800); }
+.chip.ghost { border-style: dashed; color: var(--ink-500); }
 </style>

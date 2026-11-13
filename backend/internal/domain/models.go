@@ -79,6 +79,7 @@ type Product struct {
 	PriceInternal    *int64
 	IsVisible        bool
 	SortOrder        int
+	Badge            string  // nhãn góc thẻ, rỗng = không hiện
 	CategoryID       *int64  // nil = sản phẩm chính (trang chủ)
 	CategoryName     *string // chỉ đọc (JOIN)
 	CategorySlug     *string // chỉ đọc (JOIN)

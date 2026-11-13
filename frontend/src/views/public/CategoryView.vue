@@ -7,6 +7,7 @@ import { telHref } from '../../utils/format'
 import AppIcon from '../../components/AppIcon.vue'
 import ProductCard from '../../components/ProductCard.vue'
 import ProductModal from '../../components/ProductModal.vue'
+import HeroLights from '../../components/HeroLights.vue'
 
 // Trang danh mục (ngách) sản phẩm: /danh-muc/:slug — vd. Đèn dự án.
 const route = useRoute()
@@ -59,15 +60,16 @@ function close() {
 
 <template>
   <section class="hero" :class="{ 'has-cover': category?.cover_url }" :style="heroStyle">
+    <HeroLights />
     <div class="container hero-in">
-      <nav class="crumbs small" aria-label="Đường dẫn">
+      <nav class="crumbs small enter" aria-label="Đường dẫn">
         <RouterLink to="/">Trang chủ</RouterLink><span aria-hidden="true">/</span><span>{{ category?.name || 'Danh mục' }}</span>
       </nav>
       <template v-if="category">
-        <h1>{{ category.name }}</h1>
-        <p v-if="category.description" class="sub">{{ category.description }}</p>
-        <div class="ctas">
-          <a href="#ds-san-pham" class="btn btn-accent">Xem {{ category.product_count }} sản phẩm</a>
+        <h1 class="enter" style="--d:80ms">{{ category.name }}</h1>
+        <p v-if="category.description" class="sub enter" style="--d:180ms">{{ category.description }}</p>
+        <div class="ctas enter" style="--d:280ms">
+          <a href="#ds-san-pham" class="btn btn-accent btn-shine">Xem {{ category.product_count }} sản phẩm</a>
           <a v-if="phone" :href="telHref(phone)" class="btn btn-light"><AppIcon name="phone" /> Gọi báo giá {{ phone }}</a>
         </div>
       </template>
@@ -102,7 +104,7 @@ function close() {
       <button class="btn btn-ghost btn-sm" @click="load">Tải lại</button>
     </div>
     <template v-else>
-      <div class="sec-head">
+      <div v-reveal class="sec-head">
         <div>
           <h2>Sản phẩm {{ category.name.toLowerCase() }}</h2>
           <p class="muted">{{ products.length }} sản phẩm · Giá niêm yết, liên hệ để có giá dự án theo số lượng</p>
@@ -124,7 +126,7 @@ function close() {
         <button class="btn btn-ghost btn-sm" @click="q = ''">Xem tất cả</button>
       </div>
       <div v-else class="grid">
-        <ProductCard v-for="p in filtered" :key="p.id" :product="p" @open="open" />
+        <ProductCard v-for="(p, i) in filtered" :key="p.id" v-reveal="i" :product="p" @open="open" />
       </div>
     </template>
   </section>
@@ -137,7 +139,7 @@ function close() {
   radial-gradient(60% 80% at 85% 10%, rgba(47,124,240,.55), transparent 60%),
   linear-gradient(135deg, var(--sea-600) 0%, var(--sea-800) 55%, var(--sea-900) 100%); }
 /* Có ảnh bìa: phủ lớp màu để chữ trắng luôn đọc được */
-.hero.has-cover { background:
+.hero.hero.has-cover { background:
   linear-gradient(100deg, rgba(7,42,99,.92) 0%, rgba(7,42,99,.78) 45%, rgba(7,42,99,.35) 100%),
   var(--cover) center / cover no-repeat, var(--sea-900); }
 @media (min-width: 960px) { .hero { padding: 56px 0 130px; } }

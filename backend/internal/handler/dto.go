@@ -68,6 +68,7 @@ type PublicProductDTO struct {
 	ShortDescription string  `json:"short_description"`
 	Price            int64   `json:"price"`
 	Unit             string  `json:"unit"`
+	Badge            string  `json:"badge"`
 	MainImageURL     *string `json:"main_image_url"`
 }
 
@@ -89,17 +90,18 @@ type PublicProductDetailDTO struct {
 	Specs            []domain.Spec    `json:"specs"`
 	Price            int64            `json:"price"`
 	Unit             string           `json:"unit"`
+	Badge            string           `json:"badge"`
 	Images           []PublicImageDTO `json:"images"`
 }
 
 func toPublicProduct(p *domain.Product) PublicProductDTO {
 	return PublicProductDTO{ID: p.ID, Slug: p.Slug, Name: p.Name, ShortDescription: p.ShortDescription,
-		Price: p.PricePublic, Unit: p.Unit, MainImageURL: imageURLPtr(p.MainImageID)}
+		Price: p.PricePublic, Unit: p.Unit, Badge: p.Badge, MainImageURL: imageURLPtr(p.MainImageID)}
 }
 
 func toPublicProductDetail(p *domain.Product) PublicProductDetailDTO {
 	out := PublicProductDetailDTO{ID: p.ID, Slug: p.Slug, Name: p.Name, ShortDescription: p.ShortDescription,
-		Description: p.Description, Specs: p.Specs, Price: p.PricePublic, Unit: p.Unit, Images: []PublicImageDTO{}}
+		Description: p.Description, Specs: p.Specs, Price: p.PricePublic, Unit: p.Unit, Badge: p.Badge, Images: []PublicImageDTO{}}
 	if out.Specs == nil {
 		out.Specs = []domain.Spec{}
 	}
@@ -204,6 +206,7 @@ type InternalProductDTO struct {
 	SortOrder        int                `json:"sort_order"`
 	CategoryID       *int64             `json:"category_id"`
 	CategoryName     *string            `json:"category_name"`
+	Badge            string             `json:"badge"`
 	MainImageURL     *string            `json:"main_image_url"`
 	Images           []InternalImageDTO `json:"images,omitempty"`
 	CreatedAt        time.Time          `json:"created_at"`
@@ -213,7 +216,7 @@ type InternalProductDTO struct {
 func toInternalProduct(p *domain.Product, withImages bool) InternalProductDTO {
 	out := InternalProductDTO{ID: p.ID, Name: p.Name, Slug: p.Slug, SKU: p.SKU, ShortDescription: p.ShortDescription,
 		Description: p.Description, Specs: p.Specs, Unit: p.Unit, PricePublic: p.PricePublic, PriceInternal: p.PriceInternal,
-		IsVisible: p.IsVisible, SortOrder: p.SortOrder, CategoryID: p.CategoryID, CategoryName: p.CategoryName,
+		IsVisible: p.IsVisible, SortOrder: p.SortOrder, CategoryID: p.CategoryID, CategoryName: p.CategoryName, Badge: p.Badge,
 		MainImageURL: imageURLPtr(p.MainImageID),
 		CreatedAt:    p.CreatedAt, UpdatedAt: p.UpdatedAt}
 	if out.Specs == nil {

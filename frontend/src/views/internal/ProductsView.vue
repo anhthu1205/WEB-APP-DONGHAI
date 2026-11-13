@@ -65,7 +65,7 @@ onMounted(load)
               <td data-label="Sản phẩm">
                 <div class="prod">
                   <span class="thumb"><img v-if="p.main_image_url" :src="p.main_image_url" alt="" loading="lazy" /><ProductPlaceholder v-else :seed="p.id" /></span>
-                  <span><strong>{{ p.name }}</strong><br /><span class="muted small">{{ p.sku || p.slug }}</span></span>
+                  <span><strong>{{ p.name }}</strong><br /><span class="muted small">{{ p.sku || p.slug }}</span><span v-if="p.badge" class="tag-mini">{{ p.badge }}</span></span>
                 </div>
               </td>
               <td data-label="Danh mục"><span class="badge" :class="p.category_name ? 'badge-blue' : 'badge-muted'">{{ p.category_name || 'Trang chủ' }}</span></td>
@@ -94,4 +94,5 @@ onMounted(load)
 .icon-only { width: 36px; padding: 0; justify-content: center; }
 .actions .row { flex-wrap: nowrap; gap: 6px; }
 td.num { white-space: nowrap; }
+.tag-mini { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 700; color: #fff; background: linear-gradient(135deg, #ef4444, #f97316); vertical-align: 1px; }
 </style>
